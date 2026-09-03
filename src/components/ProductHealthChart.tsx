@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { useEffect, useMemo, useState } from "react";
 import { Activity } from "lucide-react";
-import ChartTooltipShell from "./ChartTooltipShell";
+import { EChart, shellTooltip, tooltipRow, tooltipTitle, useChartTheme } from "./charts";
+import type { ChartOption, TopLevelFormatterParams } from "./charts";
 
 interface ProductHealthPoint {
   date: string;
@@ -18,30 +18,9 @@ interface ChartPoint {
   healthScore: number | null;
 }
 
-function CustomTooltip({ active, payload }: { active?: boolean; payload?: { payload: ChartPoint }[] }) {
-  if (!active || !payload?.length) return null;
-  const point = payload[0].payload;
-  return (
-    <ChartTooltipShell>
-      <div className="font-medium">{point.dateLabel}</div>
-      <div className="mt-1.5 flex items-center justify-between gap-6">
-        <span className="text-muted">Daily active users</span>
-        <span className="font-semibold tabular-nums" style={{ color: "var(--accent)" }}>
-          {point.dau ?? "—"}
-        </span>
-      </div>
-      <div className="flex items-center justify-between gap-6">
-        <span className="text-muted">Health score</span>
-        <span className="font-semibold tabular-nums" style={{ color: "var(--success)" }}>
-          {point.healthScore ?? "—"}
-        </span>
-      </div>
-    </ChartTooltipShell>
-  );
-}
-
 export default function ProductHealthChart({ appId }: { appId: string }) {
   const [trend, setTrend] = useState<ProductHealthPoint[] | null | undefined>(undefined);
+  const theme = useChartTheme();
 
   useEffect(() => {
     function load() {
@@ -62,6 +41,114 @@ export default function ProductHealthChart({ appId }: { appId: string }) {
     window.addEventListener("posthog-status-change", onPostHogStatusChange);
     return () => window.removeEventListener("posthog-status-change", onPostHogStatusChange);
   }, [appId]);
+
+  const data = useMemo<ChartPoint[]>(
+    () =>
+      (trend ?? []).map((p) => {
+        const date = new Date(p.date);
+        return {
+          xLabel: date.toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+          dateLabel: date.toLocaleDateString(undefined, {
+            weekday: "short",
+            month: "short",
+            day: "numeric",
+          }),
+          dau: p.dau,
+          healthScore: p.healthScore,
+        };
+      }),
+    [trend],
+  );
+
+  const option = useMemo<ChartOption>(() => {
+    return {
+      grid: { top: 8, right: 8, left: 0, bottom: 0, containLabel: true },
+      tooltip: {
+        ...shellTooltip(theme),
+        trigger: "axis",
+        confine: true,
+        axisPointer: { type: "line", lineStyle: { color: theme.border } },
+        formatter: (params: TopLevelFormatterParams) => {
+          const first = Array.isArray(params) ? params[0] : params;
+          const point = first ? data[first.dataIndex] : undefined;
+          if (!point) return "";
+          return (
+            tooltipTitle(point.dateLabel, theme) +
+            `<div style="margin-top: 6px">` +
+            tooltipRow(
+              "Daily active users",
+              point.dau != null ? String(point.dau) : "—",
+              theme,
+              theme.accent,
+            ) +
+            tooltipRow(
+              "Health score",
+              point.healthScore != null ? String(point.healthScore) : "—",
+              theme,
+              theme.success,
+            ) +
+            `</div>`
+          );
+        },
+      },
+      xAxis: {
+        type: "category",
+        data: data.map((d) => d.xLabel),
+        boundaryGap: false,
+        axisLine: { lineStyle: { color: theme.border } },
+        axisTick: { show: false },
+        axisLabel: { color: theme.muted, fontSize: 11, hideOverlap: true },
+      },
+      yAxis: [
+        {
+          type: "value",
+          minInterval: 1,
+          axisLine: { show: false },
+          axisTick: { show: false },
+          axisLabel: { color: theme.muted, fontSize: 11 },
+          splitLine: { lineStyle: { color: theme.border, type: [3, 3] } },
+        },
+        {
+          type: "value",
+          min: 0,
+          max: 100,
+          position: "right",
+          axisLine: { show: false },
+          axisTick: { show: false },
+          axisLabel: { color: theme.muted, fontSize: 11 },
+          splitLine: { show: false },
+        },
+      ],
+      series: [
+        {
+          type: "line",
+          id: "dau",
+          name: "Daily active users",
+          yAxisIndex: 0,
+          data: data.map((d) => d.dau),
+          showSymbol: false,
+          symbolSize: 8,
+          smooth: true,
+          connectNulls: true,
+          lineStyle: { color: theme.accent, width: 2 },
+          itemStyle: { color: theme.accent },
+        },
+        {
+          type: "line",
+          id: "health",
+          name: "Health score",
+          yAxisIndex: 1,
+          data: data.map((d) => d.healthScore),
+          showSymbol: false,
+          symbolSize: 8,
+          smooth: true,
+          connectNulls: true,
+          lineStyle: { color: theme.success, width: 2 },
+          itemStyle: { color: theme.success },
+        },
+      ],
+    };
+  }, [data, theme]);
 
   if (trend === undefined) {
     return (
@@ -84,16 +171,6 @@ export default function ProductHealthChart({ appId }: { appId: string }) {
     );
   }
 
-  const data: ChartPoint[] = trend.map((p) => {
-    const date = new Date(p.date);
-    return {
-      xLabel: date.toLocaleDateString(undefined, { month: "short", day: "numeric" }),
-      dateLabel: date.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }),
-      dau: p.dau,
-      healthScore: p.healthScore,
-    };
-  });
-
   return (
     <div className="animate-fade-in-up rounded-xl border border-border bg-card p-4 sm:p-6">
       <div className="mb-3 flex items-center justify-between">
@@ -109,56 +186,11 @@ export default function ProductHealthChart({ appId }: { appId: string }) {
           </span>
         </div>
       </div>
-      <ResponsiveContainer width="100%" height={220}>
-        <LineChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-          <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
-          <XAxis
-            dataKey="xLabel"
-            tick={{ fill: "var(--muted)", fontSize: 11 }}
-            axisLine={{ stroke: "var(--border)" }}
-            tickLine={false}
-            minTickGap={20}
-          />
-          <YAxis
-            yAxisId="dau"
-            allowDecimals={false}
-            tick={{ fill: "var(--muted)", fontSize: 11 }}
-            axisLine={false}
-            tickLine={false}
-            width={36}
-          />
-          <YAxis
-            yAxisId="health"
-            orientation="right"
-            domain={[0, 100]}
-            tick={{ fill: "var(--muted)", fontSize: 11 }}
-            axisLine={false}
-            tickLine={false}
-            width={32}
-          />
-          <Tooltip content={<CustomTooltip />} />
-          <Line
-            yAxisId="dau"
-            type="monotone"
-            dataKey="dau"
-            stroke="var(--accent)"
-            strokeWidth={2}
-            dot={false}
-            activeDot={{ r: 4 }}
-            connectNulls
-          />
-          <Line
-            yAxisId="health"
-            type="monotone"
-            dataKey="healthScore"
-            stroke="var(--success)"
-            strokeWidth={2}
-            dot={false}
-            activeDot={{ r: 4 }}
-            connectNulls
-          />
-        </LineChart>
-      </ResponsiveContainer>
+      <EChart
+        option={option}
+        height={220}
+        ariaLabel="Line chart of daily active users versus ASO health score over time"
+      />
     </div>
   );
 }

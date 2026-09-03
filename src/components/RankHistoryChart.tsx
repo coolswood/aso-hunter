@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import ChartTooltipShell from "./ChartTooltipShell";
+import { EChart, shellTooltip, tooltipRow, tooltipTitle, useChartTheme } from "./charts";
+import type { ChartOption, TopLevelFormatterParams } from "./charts";
 
 interface RankPoint {
   position: number | null;
@@ -18,42 +18,9 @@ interface ChartPoint {
 
 const RANGES = [7, 30] as const;
 
-function CustomTooltip({
-  active,
-  payload,
-}: {
-  active?: boolean;
-  payload?: { payload: ChartPoint }[];
-}) {
-  if (!active || !payload?.length) return null;
-  const point = payload[0].payload;
-
-  return (
-    <ChartTooltipShell>
-      <div className="font-medium">{point.dateLabel}</div>
-      <div className="mt-1.5 flex items-center justify-between gap-6">
-        <span className="text-muted">Rank</span>
-        <span className="font-semibold tabular-nums">
-          {point.position !== null ? `#${point.position}` : "Not ranked"}
-        </span>
-      </div>
-      {point.change !== null && point.change !== 0 && (
-        <div className="flex items-center justify-between gap-6">
-          <span className="text-muted">Change</span>
-          <span
-            className="font-medium tabular-nums"
-            style={{ color: point.change > 0 ? "var(--success)" : "var(--danger)" }}
-          >
-            {point.change > 0 ? `+${point.change}` : point.change}
-          </span>
-        </div>
-      )}
-    </ChartTooltipShell>
-  );
-}
-
 export default function RankHistoryChart({ ranks }: { ranks: RankPoint[] }) {
   const [range, setRange] = useState<(typeof RANGES)[number]>(7);
+  const theme = useChartTheme();
 
   // ranks arrives newest-first (matches the table); the chart reads
   // left-to-right chronologically.
@@ -64,7 +31,8 @@ export default function RankHistoryChart({ ranks }: { ranks: RankPoint[] }) {
     () =>
       sliced.map((r, i) => {
         const prev = sliced[i - 1];
-        const change = r.position !== null && prev?.position != null ? prev.position - r.position : null;
+        const change =
+          r.position !== null && prev?.position != null ? prev.position - r.position : null;
         const date = new Date(r.checkedAt);
         return {
           xLabel: date.toLocaleDateString(undefined, { month: "short", day: "numeric" }),
@@ -81,6 +49,74 @@ export default function RankHistoryChart({ ranks }: { ranks: RankPoint[] }) {
     [sliced],
   );
 
+  const option = useMemo<ChartOption>(() => {
+    return {
+      grid: { top: 8, right: 8, left: 0, bottom: 0, containLabel: true },
+      tooltip: {
+        ...shellTooltip(theme),
+        trigger: "axis",
+        confine: true,
+        axisPointer: { type: "line", lineStyle: { color: theme.border } },
+        formatter: (params: TopLevelFormatterParams) => {
+          const first = Array.isArray(params) ? params[0] : params;
+          const point = first ? data[first.dataIndex] : undefined;
+          if (!point) return "";
+          let html =
+            tooltipTitle(point.dateLabel, theme) +
+            `<div style="margin-top: 6px">` +
+            tooltipRow(
+              "Rank",
+              point.position !== null ? `#${point.position}` : "Not ranked",
+              theme,
+            );
+          if (point.change !== null && point.change !== 0) {
+            html += tooltipRow(
+              "Change",
+              point.change > 0 ? `+${point.change}` : String(point.change),
+              theme,
+              point.change > 0 ? theme.success : theme.danger,
+            );
+          }
+          return html + `</div>`;
+        },
+      },
+      xAxis: {
+        type: "category",
+        data: data.map((d) => d.xLabel),
+        boundaryGap: false,
+        axisLine: { lineStyle: { color: theme.border } },
+        axisTick: { show: false },
+        axisLabel: { color: theme.muted, fontSize: 11, hideOverlap: true },
+      },
+      yAxis: {
+        type: "value",
+        // Rank #1 must sit on top of the axis.
+        inverse: true,
+        minInterval: 1,
+        min: (value: { min: number; max: number }) => Math.max(1, Math.floor(value.min) - 1),
+        max: (value: { min: number; max: number }) => Math.ceil(value.max) + 1,
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: { color: theme.muted, fontSize: 11 },
+        splitLine: { lineStyle: { color: theme.border, type: [3, 3] } },
+      },
+      series: [
+        {
+          type: "line",
+          id: "position",
+          data: data.map((d) => d.position),
+          showSymbol: true,
+          symbol: "circle",
+          symbolSize: 6,
+          smooth: true,
+          connectNulls: true,
+          lineStyle: { color: theme.accent, width: 2 },
+          itemStyle: { color: theme.accent },
+        },
+      ],
+    };
+  }, [data, theme]);
+
   const knownPositions = data.map((d) => d.position).filter((p): p is number => p !== null);
 
   return (
@@ -93,7 +129,9 @@ export default function RankHistoryChart({ ranks }: { ranks: RankPoint[] }) {
               key={r}
               onClick={() => setRange(r)}
               className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                range === r ? "bg-accent text-accent-foreground" : "text-muted hover:text-foreground"
+                range === r
+                  ? "bg-accent text-accent-foreground"
+                  : "text-muted hover:text-foreground"
               }`}
             >
               {r}D
@@ -105,41 +143,11 @@ export default function RankHistoryChart({ ranks }: { ranks: RankPoint[] }) {
       {knownPositions.length < 2 ? (
         <div className="py-10 text-center text-sm text-muted">Not enough history yet.</div>
       ) : (
-        <ResponsiveContainer width="100%" height={220}>
-          <LineChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-            <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
-            <XAxis
-              dataKey="xLabel"
-              tick={{ fill: "var(--muted)", fontSize: 11 }}
-              axisLine={{ stroke: "var(--border)" }}
-              tickLine={false}
-              minTickGap={20}
-            />
-            <YAxis
-              reversed
-              allowDecimals={false}
-              tick={{ fill: "var(--muted)", fontSize: 11 }}
-              axisLine={false}
-              tickLine={false}
-              width={32}
-              domain={[
-                (min: number) => Math.max(1, Math.floor(min) - 1),
-                (max: number) => Math.ceil(max) + 1,
-              ]}
-            />
-            <Tooltip content={<CustomTooltip />} />
-            <Line
-              type="monotone"
-              dataKey="position"
-              stroke="var(--accent)"
-              strokeWidth={2}
-              dot={{ r: 3, fill: "var(--accent)", strokeWidth: 0 }}
-              activeDot={{ r: 5 }}
-              connectNulls
-              isAnimationActive
-            />
-          </LineChart>
-        </ResponsiveContainer>
+        <EChart
+          option={option}
+          height={220}
+          ariaLabel="Line chart of the keyword's search rank over time"
+        />
       )}
     </div>
   );

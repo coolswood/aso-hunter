@@ -23,6 +23,7 @@
 | Health score                            | —                                                     | `src/lib/health.ts`, `server/routes/apps.health.ts`, `src/components/HealthReportPanel.tsx`                                         |
 | Keyword research (winning keywords)     | —                                                     | `src/lib/research.ts`, `server/routes/keyword-ideas.ts`, `src/components/ResearchSection.tsx`                                       |
 | Global Reach (карта по странам)         | —                                                     | `src/components/GlobalReachSection.tsx`, `src/components/WorldMap.tsx`, `keywordCountryRanks` в схеме                               |
+| Графики и карта (ECharts)               | [charts.md](./features/charts.md)                     | `src/components/charts/`, `ProductHealthChart`, `RankHistoryChart`, `KeywordsOverviewChart`, `WorldMap`                             |
 | Отзывы и их анализ                      | —                                                     | `server/routes/apps.reviews.ts`, `src/lib/reviewAnalysis.ts`, `src/components/ReviewsSection.tsx`                                   |
 | Локализации и их аудит                  | —                                                     | `server/routes/apps.localizations.ts`, `src/lib/localizationSync.ts`, `src/lib/localizationAudit.ts`, `src/lib/localeCandidates.ts` |
 | AI Copy Suggestions                     | —                                                     | `src/lib/ai.ts`, `src/lib/aiLocales.ts`, `server/routes/apps.ai-suggestions.ts`, `src/components/AICopySuggestions.tsx`             |
@@ -38,9 +39,9 @@
 
 Сложные переиспользуемые компоненты (триггеры и каноническая структура — правило AGENTS.md №10). Док модуля — `README.md` в его папке.
 
-| Модуль | README | Локация | Назначение                                                |
-| ------ | ------ | ------- | --------------------------------------------------------- |
-| —      | —      | —       | пока нет; оформляй по правилу №10 при достижении триггера |
+| Модуль | README                                          | Локация                  | Назначение                                                                            |
+| ------ | ----------------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------- |
+| charts | [README.md](../src/components/charts/README.md) | `src/components/charts/` | визуализация на echarts: обёртка `EChart`, темы-цвета, тултипы, модульная регистрация |
 
 <!-- Добавляй новые строки сюда по мере создания модулей. -->
 
