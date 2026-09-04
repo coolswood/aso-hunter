@@ -1,5 +1,5 @@
 import { Fragment, useMemo, useState } from "react";
-import { ArrowUpDown, Check, ChevronDown, Copy, RefreshCw, Trash2 } from "lucide-react";
+import { ArrowUpDown, ChevronDown, RefreshCw, Trash2 } from "lucide-react";
 import { SiAppstore, SiGoogleplay } from "react-icons/si";
 import RankSparkline from "../RankSparkline";
 import RankHistoryChart from "../RankHistoryChart";
@@ -41,22 +41,17 @@ export default function KeywordTable({
   country,
   keywords,
   onChanged,
-  onCopyKeywords,
 }: {
   appId: string;
   platform: StorePlatform;
   country: string;
   keywords: KeywordWithRanks[];
   onChanged?: () => void;
-  onCopyKeywords?: (terms: string[]) => void;
 }) {
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [sortField, setSortField] = useState<SortField>("rank");
   const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [deletingBulk, setDeletingBulk] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [copySuccess, setCopySuccess] = useState(false);
 
   // Sorting
   function handleSort(field: SortField) {
@@ -130,55 +125,9 @@ export default function KeywordTable({
     });
   }, [keywords, sortField, sortOrder]);
 
-  // Selection handlers
-  const allSelected = keywords.length > 0 && selectedIds.size === keywords.length;
-  const isIndeterminate = selectedIds.size > 0 && selectedIds.size < keywords.length;
-
-  function toggleSelectAll() {
-    if (allSelected) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(keywords.map((k) => k.id)));
-    }
-  }
-
-  function toggleSelectRow(id: string) {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  }
-
-  async function deleteSelected() {
-    if (selectedIds.size === 0) return;
-    setDeletingBulk(true);
-    try {
-      const res = await fetch(`/api/apps/${appId}/keywords/bulk`, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids: Array.from(selectedIds) }),
-      });
-      if (res.ok) {
-        setSelectedIds(new Set());
-        onChanged?.();
-      }
-    } finally {
-      setDeletingBulk(false);
-    }
-  }
-
   async function removeSingle(keywordId: string) {
     await fetch(`/api/apps/${appId}/keywords/${keywordId}`, { method: "DELETE" });
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      next.delete(keywordId);
-      return next;
-    });
+    if (expanded === keywordId) setExpanded(null);
     onChanged?.();
   }
 
@@ -194,74 +143,13 @@ export default function KeywordTable({
     }
   }
 
-  function handleCopySelected() {
-    const selectedTerms = keywords.filter((k) => selectedIds.has(k.id)).map((k) => k.term);
-
-    if (selectedTerms.length > 0) {
-      onCopyKeywords?.(selectedTerms);
-      setCopySuccess(true);
-      setTimeout(() => setCopySuccess(false), 2500);
-    }
-  }
-
   return (
     <div className="space-y-3">
-      {/* Top action bar when items are selected */}
-      {selectedIds.size > 0 && (
-        <div className="animate-fade-in-up flex flex-wrap items-center justify-between gap-2 rounded-lg border border-accent/40 bg-accent/10 px-3.5 py-2 text-sm">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-foreground">
-              {selectedIds.size} of {keywords.length} selected
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleCopySelected}
-              className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-xs font-medium hover:bg-accent hover:text-accent-foreground transition-colors"
-              title="Copy selected keywords for App Store Connect"
-            >
-              {copySuccess ? (
-                <Check className="h-3.5 w-3.5 text-emerald-400" />
-              ) : (
-                <Copy className="h-3.5 w-3.5" />
-              )}
-              {copySuccess ? "Copied!" : "Copy selected"}
-            </button>
-            <button
-              onClick={deleteSelected}
-              disabled={deletingBulk}
-              className="inline-flex items-center gap-1.5 rounded-md border border-rose-500/40 bg-rose-500/10 px-2.5 py-1 text-xs font-medium text-rose-400 hover:bg-rose-500/20 disabled:opacity-50 transition-colors"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              {deletingBulk ? "Deleting..." : "Delete selected"}
-            </button>
-            <button
-              onClick={() => setSelectedIds(new Set())}
-              className="text-xs text-muted hover:text-foreground px-1"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Main Keywords Table */}
       <div className="rounded-xl border border-border bg-card/80 shadow-sm backdrop-blur-xs overflow-x-auto">
-        <table className="w-full text-left text-sm border-collapse min-w-[840px]">
+        <table className="w-full text-left text-sm border-collapse min-w-[800px]">
           <thead>
             <tr className="border-b border-border/80 text-[11px] font-semibold tracking-wider text-muted uppercase select-none">
-              <th className="py-3 px-3 w-10 text-center">
-                <input
-                  type="checkbox"
-                  checked={allSelected}
-                  ref={(el) => {
-                    if (el) el.indeterminate = isIndeterminate;
-                  }}
-                  onChange={toggleSelectAll}
-                  aria-label="Select all keywords"
-                  className="h-4 w-4 rounded border-border bg-card accent-accent cursor-pointer transition-colors"
-                />
-              </th>
               <th
                 onClick={() => handleSort("term")}
                 className="py-3 px-3 cursor-pointer hover:text-foreground transition-colors"
@@ -371,35 +259,26 @@ export default function KeywordTable({
               const latest = k.ranks[0]?.position ?? null;
               const previous = k.ranks[1]?.position ?? null;
               const isOpen = expanded === k.id;
-              const isSelected = selectedIds.has(k.id);
 
               return (
                 <Fragment key={k.id}>
                   <tr
-                    className={`transition-colors select-none ${
-                      isSelected
-                        ? "bg-emerald-950/20 hover:bg-emerald-950/30"
-                        : "hover:bg-background/60"
+                    className={`transition-colors ${
+                      isOpen ? "bg-accent/5" : "hover:bg-background/60"
                     }`}
                     style={{ animationDelay: `${Math.min(i, 15) * 25}ms` }}
                   >
-                    {/* Checkbox */}
-                    <td className="py-2.5 px-3 text-center">
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => toggleSelectRow(k.id)}
-                        aria-label={`Select keyword ${k.term}`}
-                        className="h-4 w-4 rounded border-border bg-card accent-accent cursor-pointer"
-                      />
-                    </td>
-
                     {/* Term & Store Links */}
                     <td className="py-2.5 px-3">
                       <div className="flex items-center gap-2">
-                        <span className="font-semibold text-foreground text-sm tracking-tight hover:text-accent cursor-pointer transition-colors">
+                        <button
+                          type="button"
+                          onClick={() => setExpanded(isOpen ? null : k.id)}
+                          className="font-semibold text-foreground text-sm tracking-tight hover:text-accent cursor-pointer transition-colors text-left"
+                          title="Click to toggle rank history chart"
+                        >
                           {k.term}
-                        </span>
+                        </button>
                         <div className="inline-flex items-center gap-1 opacity-60 hover:opacity-100 transition-opacity">
                           <a
                             href={appStoreSearchUrl(k.term, k.country)}
@@ -407,6 +286,7 @@ export default function KeywordTable({
                             rel="noreferrer"
                             title="Search in App Store"
                             className="text-muted hover:text-accent p-0.5"
+                            onClick={(e) => e.stopPropagation()}
                           >
                             <SiAppstore className="h-3.5 w-3.5" />
                           </a>
@@ -416,6 +296,7 @@ export default function KeywordTable({
                             rel="noreferrer"
                             title="Search in Google Play"
                             className="text-muted hover:text-accent p-0.5"
+                            onClick={(e) => e.stopPropagation()}
                           >
                             <SiGoogleplay className="h-3.5 w-3.5" />
                           </a>
@@ -462,8 +343,9 @@ export default function KeywordTable({
                     <td className="py-2.5 px-3 text-right">
                       <div className="inline-flex items-center justify-end gap-2">
                         <button
+                          type="button"
                           onClick={() => setExpanded(isOpen ? null : k.id)}
-                          className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 hover:bg-background transition-colors"
+                          className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 hover:bg-background border border-transparent hover:border-border transition-all"
                           aria-expanded={isOpen}
                           title="View ranking history chart"
                         >
@@ -475,7 +357,11 @@ export default function KeywordTable({
                           />
                         </button>
                         <button
-                          onClick={() => removeSingle(k.id)}
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeSingle(k.id);
+                          }}
                           title="Stop tracking keyword"
                           className="text-muted hover:text-rose-400 p-1 transition-colors"
                         >
@@ -488,13 +374,29 @@ export default function KeywordTable({
                   {/* Expandable History Chart */}
                   {isOpen && (
                     <tr className="border-b border-border/80 bg-background/50">
-                      <td colSpan={10} className="p-4">
-                        <div className="rounded-lg border border-border/60 bg-card/60 p-4">
-                          <div className="mb-2 flex items-center justify-between text-xs text-muted">
-                            <span className="font-semibold text-foreground">
-                              Rank History for &ldquo;{k.term}&rdquo; ({country.toUpperCase()})
-                            </span>
-                            <span className="text-[11px]">Last 30 checks</span>
+                      <td colSpan={9} className="p-3 sm:p-4">
+                        <div className="rounded-lg border border-border/60 bg-card/70 p-4 shadow-xs">
+                          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-border/40 pb-2.5">
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-foreground text-sm">
+                                &ldquo;{k.term}&rdquo;
+                              </span>
+                              <span className="rounded bg-border/50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted">
+                                {country.toUpperCase()}
+                              </span>
+                              <div className="flex items-center gap-1.5 text-xs text-muted ml-2">
+                                <span className="text-[11px] uppercase tracking-wide opacity-70">
+                                  Current:
+                                </span>
+                                <RankBadge rank={latest} />
+                                {previous !== null && (
+                                  <ChangeDeltaBadge latest={latest} previous={previous} />
+                                )}
+                              </div>
+                            </div>
+                            <div className="text-xs text-muted">
+                              {k.ranks.length} check{k.ranks.length === 1 ? "" : "s"} recorded
+                            </div>
                           </div>
                           <RankHistoryChart ranks={k.ranks} />
                         </div>

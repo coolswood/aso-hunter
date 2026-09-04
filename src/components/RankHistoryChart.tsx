@@ -16,7 +16,7 @@ interface ChartPoint {
   change: number | null;
 }
 
-const RANGES = [7, 30] as const;
+const RANGES = [7, 14, 30] as const;
 
 export default function RankHistoryChart({ ranks }: { ranks: RankPoint[] }) {
   const [range, setRange] = useState<(typeof RANGES)[number]>(7);
@@ -51,7 +51,7 @@ export default function RankHistoryChart({ ranks }: { ranks: RankPoint[] }) {
 
   const option = useMemo<ChartOption>(() => {
     return {
-      grid: { top: 8, right: 8, left: 0, bottom: 0, containLabel: true },
+      grid: { top: 12, right: 12, left: 4, bottom: 4, containLabel: true },
       tooltip: {
         ...shellTooltip(theme),
         trigger: "axis",
@@ -110,8 +110,12 @@ export default function RankHistoryChart({ ranks }: { ranks: RankPoint[] }) {
           symbolSize: 6,
           smooth: true,
           connectNulls: true,
-          lineStyle: { color: theme.accent, width: 2 },
+          lineStyle: { color: theme.accent, width: 2.5 },
           itemStyle: { color: theme.accent },
+          areaStyle: {
+            color: theme.accent,
+            opacity: 0.12,
+          },
         },
       ],
     };
@@ -120,17 +124,17 @@ export default function RankHistoryChart({ ranks }: { ranks: RankPoint[] }) {
   const knownPositions = data.map((d) => d.position).filter((p): p is number => p !== null);
 
   return (
-    <div className="animate-fade-in-up rounded-xl border border-border bg-card p-4 sm:p-6">
-      <div className="mb-3 flex items-center justify-between">
-        <div className="text-sm font-medium">Rank history</div>
-        <div className="inline-flex rounded-lg border border-border p-0.5">
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium text-muted">Rank history trajectory</span>
+        <div className="inline-flex rounded-lg border border-border/70 p-0.5 bg-background/50">
           {RANGES.map((r) => (
             <button
               key={r}
               onClick={() => setRange(r)}
-              className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+              className={`rounded px-2.5 py-0.5 text-xs font-medium transition-colors ${
                 range === r
-                  ? "bg-accent text-accent-foreground"
+                  ? "bg-accent text-accent-foreground shadow-xs"
                   : "text-muted hover:text-foreground"
               }`}
             >
@@ -141,11 +145,15 @@ export default function RankHistoryChart({ ranks }: { ranks: RankPoint[] }) {
       </div>
 
       {knownPositions.length < 2 ? (
-        <div className="py-10 text-center text-sm text-muted">Not enough history yet.</div>
+        <div className="py-8 text-center text-xs text-muted">
+          {knownPositions.length === 0
+            ? "No ranks found yet for this keyword."
+            : "Only 1 rank check recorded so far. Subsequent checks will form the trend line."}
+        </div>
       ) : (
         <EChart
           option={option}
-          height={220}
+          height={200}
           ariaLabel="Line chart of the keyword's search rank over time"
         />
       )}
