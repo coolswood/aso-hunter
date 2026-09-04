@@ -25,6 +25,8 @@ services:
     # `DATABASE_URL=postgresql://aso:aso@localhost:5433/aso bun run db:migrate`.
     ports:
       - "${APP_PORT:-3001}:3000"
+    volumes:
+      - ./config:/app/config
     depends_on:
       - db
 
