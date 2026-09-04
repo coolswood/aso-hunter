@@ -57,3 +57,13 @@ UI (KeywordTable) ─► REST /api/apps/:id/keywords ─► appService.addKeywor
 - Селектор стран: [country-selector.md](./country-selector.md)
 - Графика и чарты: [charts.md](./charts.md)
 - Общая карта: [../ARCHITECTURE.md](../ARCHITECTURE.md)
+
+## Google Ads API (Keyword Planner) — статус интеграции
+
+- **Текущее состояние**: все 5 параметров авторизации (`CUSTOMER_ID`, `DEVELOPER_TOKEN`, `CLIENT_ID`, `CLIENT_SECRET`, `REFRESH_TOKEN`) получены и сохранены в `.env`. Подключение к OAuth2 и эндпоинтам проверено через `scripts/test-google-ads.ts`.
+- **Ожидание**: отправлена заявка на **Basic Access** в Центре API Google Ads (приложена официальная документация `docs/ASO-Hunter-Tool-Documentation.pdf`).
+- **План действий после одобрения заявки**:
+  1. Запустить `bun scripts/test-google-ads.ts` для подтверждения боевого ответа.
+  2. Реализовать сервис `src/lib/googleAdsVolume.ts` для получения точных месячных объемов поиска (`avgMonthlySearches`).
+  3. Интегрировать объемы в расчет Popularity и отображение в таблице ключевых слов.
+

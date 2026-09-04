@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>ASO-Hunter - Google Ads API Tool Documentation</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 20mm;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: #1a1a1a;
+      line-height: 1.6;
+      font-size: 13px;
+      margin: 0;
+      padding: 0;
+    }
+    .header {
+      border-bottom: 2px solid #2563eb;
+      padding-bottom: 15px;
+      margin-bottom: 25px;
+    }
+    h1 {
+      font-size: 24px;
+      color: #1e3a8a;
+      margin: 0 0 5px 0;
+    }
+    .subtitle {
+      font-size: 14px;
+      color: #4b5563;
+      font-weight: 500;
+    }
+    .meta-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 20px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+    }
+    .meta-table td {
+      padding: 8px 12px;
+      font-size: 12px;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    .meta-table td.label {
+      font-weight: 600;
+      width: 28%;
+      color: #334155;
+    }
+    h2 {
+      font-size: 16px;
+      color: #1e3a8a;
+      border-bottom: 1px solid #e2e8f0;
+      padding-bottom: 5px;
+      margin-top: 25px;
+      margin-bottom: 10px;
+    }
+    p, li {
+      color: #374151;
+      font-size: 12.5px;
+    }
+    ul {
+      margin: 8px 0;
+      padding-left: 20px;
+    }
+    .box {
+      background: #f0fdf4;
+      border-left: 4px solid #16a34a;
+      padding: 10px 15px;
+      margin: 15px 0;
+      font-size: 12px;
+      color: #166534;
+    }
+    .diagram {
+      background: #0f172a;
+      color: #f8fafc;
+      padding: 15px;
+      border-radius: 6px;
+      font-family: monospace;
+      font-size: 11px;
+      margin: 15px 0;
+      white-space: pre;
+    }
+    .ui-preview {
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      background: #090d16;
+      color: #f1f5f9;
+      padding: 15px;
+      margin: 15px 0;
+      font-size: 11px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    .table-preview {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+    .table-preview th {
+      text-align: left;
+      padding: 6px 8px;
+      color: #94a3b8;
+      border-bottom: 1px solid #334155;
+      font-size: 10px;
+      text-transform: uppercase;
+    }
+    .table-preview td {
+      padding: 8px;
+      border-bottom: 1px solid #1e293b;
+    }
+    .badge {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 600;
+    }
+    .badge-pop {
+      background: rgba(59, 130, 246, 0.2);
+      color: #60a5fa;
+    }
+    .badge-diff {
+      background: rgba(234, 179, 8, 0.2);
+      color: #facc15;
+    }
+    .badge-rank {
+      background: rgba(34, 197, 94, 0.2);
+      color: #4ade80;
+    }
+    .footer {
+      margin-top: 40px;
+      padding-top: 10px;
+      border-top: 1px solid #e2e8f0;
+      font-size: 11px;
+      color: #94a3b8;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <h1>ASO-Hunter Internal Tool Documentation</h1>
+    <div class="subtitle">Technical and Functional Overview for Google Ads API Compliance Review</div>
+  </div>
+
+  <table class="meta-table">
+    <tr>
+      <td class="label">Tool Name:</td>
+      <td>ASO-Hunter (ASO Analytics & Optimization Platform)</td>
+    </tr>
+    <tr>
+      <td class="label">Google Ads Manager Account:</td>
+      <td>426-563-8342</td>
+    </tr>
+    <tr>
+      <td class="label">Google Cloud Project Number:</td>
+      <td>461645916998</td>
+    </tr>
+    <tr>
+      <td class="label">Developer Token:</td>
+      <td>qeT_1X7GuZvCYFnpmfeEbg</td>
+    </tr>
+    <tr>
+      <td class="label">Application Environment:</td>
+      <td>Internal In-House Dashboard (Private / Restricted Access)</td>
+    </tr>
+    <tr>
+      <td class="label">Primary API Method:</td>
+      <td>KeywordPlanIdeaService.GenerateKeywordIdeas (v25)</td>
+    </tr>
+  </table>
+
+  <h2>1. Executive Summary & Purpose</h2>
+  <p>
+    <strong>ASO-Hunter</strong> is a proprietary, in-house analytical software developed by our mobile application publishing team. The tool is designed to monitor, analyze, and optimize App Store Optimization (ASO) metrics for our self-published mobile wellness and productivity applications on Google Play and Apple App Store.
+  </p>
+  <p>
+    The primary goal of integrating the Google Ads API is to evaluate real-world user search volume and keyword demand via Google's <code>KeywordPlanIdeaService</code>, helping our marketing and product teams identify relevant, high-demand, and non-saturated search queries to include in mobile application titles, subtitles, and descriptions.
+  </p>
+
+  <div class="box">
+    <strong>Audience & Compliance Notice:</strong>
+    This tool is strictly restricted to internal company staff (mobile marketing managers, ASO specialists, and data analysts). It is not offered as a commercial SaaS, not distributed to external clients, and no data retrieved from the Google Ads API is ever resold, distributed, or exposed to third parties.
+  </div>
+
+  <h2>2. Google Ads API Usage & Technical Integration</h2>
+  <p>Our integration relies exclusively on read-only keyword planning capabilities:</p>
+  <ul>
+    <li><strong>Service:</strong> <code>KeywordPlanIdeaService</code></li>
+    <li><strong>Endpoint Method:</strong> <code>customers/{customer_id}:generateKeywordIdeas</code></li>
+    <li><strong>Scope:</strong> <code>https://www.googleapis.com/auth/adwords</code></li>
+    <li><strong>Input Parameters:</strong>
+      <ul>
+        <li><code>language</code>: target storefront language (e.g., <code>languageConstants/1000</code> for English, <code>1031</code> for Russian).</li>
+        <li><code>geoTargetConstants</code>: target country criterion ID (e.g., <code>geoTargetConstants/2840</code> for United States).</li>
+        <li><code>keywordPlanNetwork</code>: <code>GOOGLE_SEARCH</code></li>
+        <li><code>keywordSeed</code>: the list of mobile application search queries currently tracked by our team.</li>
+      </ul>
+    </li>
+    <li><strong>Retrieved Data:</strong> Monthly average search volumes (<code>avgMonthlySearches</code>), competition index, and related keyword ideas.</li>
+  </ul>
+
+  <h2>3. Architecture & Data Flow</h2>
+  <div class="diagram">
++-------------------------------------------------------------------------------+
+|                           ASO-Hunter Internal Dashboard                       |
+|   (In-House Marketing Specialist inputs tracked mobile keywords / categories) |
++---------------------------------------+---------------------------------------+
+                                        |
+                                        v
++-------------------------------------------------------------------------------+
+|                       Internal Backend Server (Node / Bun)                    |
+|  - Authenticates via OAuth 2.0 (Bearer token refreshed via Offline Refresh)   |
+|  - Sends POST request to Google Ads API KeywordPlanIdeaService                |
++---------------------------------------+---------------------------------------+
+                                        |
+                                        v
++-------------------------------------------------------------------------------+
+|                            Google Ads API (v25)                               |
+|        Method: customers/{customer_id}:generateKeywordIdeas                   |
+|        Returns: Historical Search Volume, Trends & Keyword Ideas              |
++---------------------------------------+---------------------------------------+
+                                        |
+                                        v
++-------------------------------------------------------------------------------+
+|                       Private Database & UI Visualization                     |
+|  - Securely stores search metrics in internal PostgreSQL database             |
+|  - Renders Popularity (0-100), Difficulty, and Effectiveness in ASO Dashboard |
++-------------------------------------------------------------------------------+
+  </div>
+
+  <h2>4. User Interface Demonstration (ASO-Hunter)</h2>
+  <p>Below is a representation of the internal user interface where Google Ads API search volume data is displayed alongside mobile app rankings:</p>
+
+  <div class="ui-preview">
+    <div style="font-weight: bold; margin-bottom: 10px; color: #38bdf8;">ASO-Hunter — Tracked Keywords & Search Volume Overview</div>
+    <table class="table-preview">
+      <thead>
+        <tr>
+          <th>Keyword Term</th>
+          <th>Google Search Vol</th>
+          <th>ASO Popularity</th>
+          <th>Difficulty</th>
+          <th>App Rank</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>sleep tracker</td>
+          <td>49,500 / mo</td>
+          <td><span class="badge badge-pop">POPULARITY: 91</span></td>
+          <td><span class="badge badge-diff">DIFFICULTY: 69</span></td>
+          <td><span class="badge badge-rank">RANK #3</span></td>
+          <td>Optimized in title</td>
+        </tr>
+        <tr>
+          <td>cbt thought diary</td>
+          <td>8,100 / mo</td>
+          <td><span class="badge badge-pop">POPULARITY: 54</span></td>
+          <td><span class="badge badge-diff">DIFFICULTY: 45</span></td>
+          <td><span class="badge badge-rank">RANK #1</span></td>
+          <td>Targeting metadata</td>
+        </tr>
+        <tr>
+          <td>mental health tracker</td>
+          <td>14,200 / mo</td>
+          <td><span class="badge badge-pop">POPULARITY: 67</span></td>
+          <td><span class="badge badge-diff">DIFFICULTY: 52</span></td>
+          <td><span class="badge badge-rank">RANK #5</span></td>
+          <td>Under review</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>5. Security & Privacy Safeguards</h2>
+  <ul>
+    <li><strong>Authentication:</strong> All requests utilize standard Google OAuth 2.0 with secure offline refresh tokens stored in encrypted environment variables.</li>
+    <li><strong>Data Retention:</strong> Only aggregated metric numbers (monthly volumes) are stored in our private relational database for tracking historical trends.</li>
+    <li><strong>Confidentiality:</strong> No personally identifiable information (PII) is involved in keyword planning queries.</li>
+  </ul>
+
+  <div class="footer">
+    ASO-Hunter Documentation &copy; 2026. Confidential - Prepared specifically for Google Ads API Developer Review.
+  </div>
+
+</body>
+</html>
