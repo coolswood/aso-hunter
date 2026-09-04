@@ -14,7 +14,6 @@ import {
   runGlobalScan,
 } from "@/lib/appService";
 import { parseCountryParam, resolveCountry } from "@/lib/countryParam";
-import { getGooglePlayStatsMap } from "@/lib/googlePlayReports";
 import { isUniqueViolation } from "./_lib";
 
 const keywordsRoutes = new Hono();
@@ -43,12 +42,7 @@ keywordsRoutes.get("/", async (c) => {
     with: { ranks: { orderBy: [desc(keywordRanks.checkedAt)], limit: 30 } },
     orderBy: [desc(keywords.createdAt)],
   });
-  const statsMap = await getGooglePlayStatsMap(id);
-  const enriched = rows.map((k) => ({
-    ...k,
-    googlePlayStats: statsMap.get(k.term.trim().toLowerCase()) ?? null,
-  }));
-  return c.json({ keywords: enriched });
+  return c.json({ keywords: rows });
 });
 
 keywordsRoutes.post("/", async (c) => {

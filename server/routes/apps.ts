@@ -24,7 +24,6 @@ import reviewsRoutes from "./apps.reviews";
 import aiSuggestionsRoutes from "./apps.ai-suggestions";
 import syncRoutes from "./apps.sync";
 import googlePlayRoutes from "./apps.google-play";
-import { getGooglePlayStatsMap } from "@/lib/googlePlayReports";
 
 const appsApp = new Hono();
 
@@ -155,14 +154,8 @@ appsApp.get("/:id", async (c) => {
   if (!app) return c.json({ error: "Not found" }, 404);
   // Country-scoped view (shared with MCP get_app): keywords and competitors
   // of that storefront only, competitor ranks trimmed to those keywords.
-  const detail = country ? filterAppDetailByCountry(app, country) : app;
-  const statsMap = await getGooglePlayStatsMap(id);
-  const enrichedKeywords = detail.keywords.map((k) => ({
-    ...k,
-    googlePlayStats: statsMap.get(k.term.trim().toLowerCase()) ?? null,
-  }));
-
-  return c.json({ app: { ...detail, keywords: enrichedKeywords } });
+  if (!country) return c.json({ app });
+  return c.json({ app: filterAppDetailByCountry(app, country) });
 });
 
 appsApp.patch("/:id", async (c) => {

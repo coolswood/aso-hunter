@@ -26,6 +26,8 @@ import PostHogSettings from "@/components/PostHogSettings";
 import DangerZone from "@/components/DangerZone";
 import AppTabs from "@/components/AppTabs";
 import LocalizationHealthSection from "@/components/LocalizationHealthSection";
+import StoreAnalyticsSection from "@/components/store-analytics/StoreAnalyticsSection";
+import { SiGoogleplay } from "react-icons/si";
 import { parseCountryParam } from "@/lib/countryParam";
 import type { HealthBreakdownItem, HealthSuggestion } from "@/lib/health";
 import type { StorePlatform } from "@/lib/stores/types";
@@ -267,6 +269,24 @@ export default function AppDetailPage() {
               </div>
             ),
           },
+          ...(app.platform === "ANDROID"
+            ? [
+                {
+                  id: "store-analytics",
+                  label: "Store Analytics",
+                  icon: <SiGoogleplay className="h-3.5 w-3.5" />,
+                  content: (
+                    <section>
+                      <StoreAnalyticsSection
+                        appId={app.id}
+                        country={country}
+                        onKeywordsChanged={loadApp}
+                      />
+                    </section>
+                  ),
+                },
+              ]
+            : []),
           {
             id: "competitors",
             label: "Competitors",

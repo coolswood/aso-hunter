@@ -5,6 +5,7 @@ import { apps } from "@/db/schema";
 import {
   getGooglePlayCandidates,
   getGooglePlaySummary,
+  getGooglePlayTermsByDateRange,
   syncGooglePlaySearchTerms,
 } from "@/lib/googlePlayReports";
 
@@ -17,6 +18,18 @@ googlePlayRoutes.get("/summary", async (c) => {
     return c.json({ summary });
   } catch (e) {
     return c.json({ error: (e as Error).message }, 500);
+  }
+});
+
+googlePlayRoutes.get("/terms", async (c) => {
+  const id = c.req.param("id")!;
+  const startDate = c.req.query("startDate")?.trim() || undefined;
+  const endDate = c.req.query("endDate")?.trim() || undefined;
+  try {
+    const data = await getGooglePlayTermsByDateRange(id, { startDate, endDate });
+    return c.json(data);
+  } catch (e) {
+    return c.json({ error: (e as Error).message, summary: null, terms: [] }, 500);
   }
 });
 

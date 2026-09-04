@@ -1,4 +1,4 @@
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { googlePlaySearchTerms, keywords } from "@/db/schema";
 import { fetchReportCsv, listGcsFiles } from "./storage";
@@ -234,5 +234,124 @@ export async function getGooglePlaySummary(appId: string): Promise<{
     totalVisitors: Number(summary?.totalVisitors ?? 0),
     uniqueTermsCount: Number(summary?.uniqueTermsCount ?? 0),
     latestDate: summary?.latestDate ?? null,
+  };
+}
+
+export interface GooglePlayTermRow {
+  term: string;
+  acquisitions: number;
+  visitors: number;
+  conversionRate: number;
+  firstSeenDate: string;
+  lastSeenDate: string;
+  isTracked: boolean;
+  trackedCountries: string[];
+}
+
+export interface GooglePlayTermsResult {
+  summary: {
+    totalAcquisitions: number;
+    totalVisitors: number;
+    overallConversionRate: number;
+    uniqueTermsCount: number;
+    minDate: string | null;
+    maxDate: string | null;
+  };
+  terms: GooglePlayTermRow[];
+}
+
+/**
+ * Returns aggregated Google Play search terms filtered by optional date range,
+ * including tracking status for the given app.
+ */
+export async function getGooglePlayTermsByDateRange(
+  appId: string,
+  options: { startDate?: string; endDate?: string } = {},
+): Promise<GooglePlayTermsResult> {
+  const conditions = [eq(googlePlaySearchTerms.appId, appId)];
+  if (options.startDate) {
+    conditions.push(sql`${googlePlaySearchTerms.date} >= ${options.startDate}`);
+  }
+  if (options.endDate) {
+    conditions.push(sql`${googlePlaySearchTerms.date} <= ${options.endDate}`);
+  }
+
+  const whereClause = and(...conditions);
+
+  // 1. Get tracked keywords for this app with their countries
+  const tracked = await db
+    .select({ term: keywords.term, country: keywords.country })
+    .from(keywords)
+    .where(eq(keywords.appId, appId));
+
+  const trackedMap = new Map<string, string[]>();
+  for (const t of tracked) {
+    const norm = t.term.trim().toLowerCase();
+    const list = trackedMap.get(norm) ?? [];
+    if (!list.includes(t.country)) list.push(t.country);
+    trackedMap.set(norm, list);
+  }
+
+  // 2. Query aggregated terms within date range
+  const rows = await db
+    .select({
+      term: googlePlaySearchTerms.searchTerm,
+      acquisitions: sql<number>`COALESCE(SUM(${googlePlaySearchTerms.acquisitions}), 0)`,
+      visitors: sql<number>`COALESCE(SUM(${googlePlaySearchTerms.visitors}), 0)`,
+      firstSeenDate: sql<string>`MIN(${googlePlaySearchTerms.date})`,
+      lastSeenDate: sql<string>`MAX(${googlePlaySearchTerms.date})`,
+    })
+    .from(googlePlaySearchTerms)
+    .where(whereClause)
+    .groupBy(googlePlaySearchTerms.searchTerm)
+    .orderBy(desc(sql`SUM(${googlePlaySearchTerms.acquisitions})`));
+
+  let totalAcquisitions = 0;
+  let totalVisitors = 0;
+  const terms: GooglePlayTermRow[] = [];
+
+  for (const r of rows) {
+    const term = r.term.trim().toLowerCase();
+    if (IGNORED_SEARCH_TERMS.has(term)) continue;
+
+    const acquisitions = Number(r.acquisitions) || 0;
+    const visitors = Number(r.visitors) || 0;
+    const conversionRate = visitors > 0 ? acquisitions / visitors : 0;
+
+    totalAcquisitions += acquisitions;
+    totalVisitors += visitors;
+
+    const trackedCountries = trackedMap.get(term) ?? [];
+    terms.push({
+      term,
+      acquisitions,
+      visitors,
+      conversionRate,
+      firstSeenDate: r.firstSeenDate ?? "",
+      lastSeenDate: r.lastSeenDate ?? "",
+      isTracked: trackedCountries.length > 0,
+      trackedCountries,
+    });
+  }
+
+  // Query global min and max dates across all data for date range pickers
+  const [dateBounds] = await db
+    .select({
+      minDate: sql<string | null>`MIN(${googlePlaySearchTerms.date})`,
+      maxDate: sql<string | null>`MAX(${googlePlaySearchTerms.date})`,
+    })
+    .from(googlePlaySearchTerms)
+    .where(eq(googlePlaySearchTerms.appId, appId));
+
+  return {
+    summary: {
+      totalAcquisitions,
+      totalVisitors,
+      overallConversionRate: totalVisitors > 0 ? totalAcquisitions / totalVisitors : 0,
+      uniqueTermsCount: terms.length,
+      minDate: dateBounds?.minDate ?? null,
+      maxDate: dateBounds?.maxDate ?? null,
+    },
+    terms,
   };
 }
