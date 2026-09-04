@@ -60,15 +60,25 @@ describe("calculateEffectiveness", () => {
     expect(calculateEffectiveness(undefined, undefined)).toBeNull();
   });
 
-  it("calculates balanced effectiveness score", () => {
-    // volume 80, difficulty 20 -> 80 * 0.6 + 80 * 0.4 = 48 + 32 = 80
-    expect(calculateEffectiveness(80, 20)).toBe(80);
+  it("returns 0 when search demand (volume) is 0, regardless of difficulty", () => {
+    expect(calculateEffectiveness(0, 0)).toBe(0);
+    expect(calculateEffectiveness(0, 20)).toBe(0);
+    expect(calculateEffectiveness(0, 50)).toBe(0);
+    expect(calculateEffectiveness(0, 100)).toBe(0);
+  });
 
-    // volume 20, difficulty 80 -> 20 * 0.6 + 20 * 0.4 = 12 + 8 = 20
-    expect(calculateEffectiveness(20, 80)).toBe(20);
+  it("calculates balanced effectiveness score without artificial 40-point floor", () => {
+    // volume 100, difficulty 0 -> 100
+    expect(calculateEffectiveness(100, 0)).toBe(100);
 
-    // volume 50, difficulty 50 -> 50 * 0.6 + 50 * 0.4 = 30 + 20 = 50
-    expect(calculateEffectiveness(50, 50)).toBe(50);
+    // volume 80, difficulty 20 -> 80 * (100 - 8) / 100 = 74
+    expect(calculateEffectiveness(80, 20)).toBe(74);
+
+    // volume 50, difficulty 50 -> 50 * (100 - 20) / 100 = 40
+    expect(calculateEffectiveness(50, 50)).toBe(40);
+
+    // volume 20, difficulty 80 -> 20 * (100 - 32) / 100 = 14
+    expect(calculateEffectiveness(20, 80)).toBe(14);
   });
 
   it("clamps out-of-bounds input values to 0-100", () => {

@@ -80,6 +80,7 @@ export function calculateRankDelta(
 /**
  * Normalized 0-100 Effectiveness score balancing demand (volume) and competitiveness (difficulty).
  * High volume + low difficulty = high effectiveness.
+ * If search demand (volume) is 0, effectiveness is strictly 0.
  */
 export function calculateEffectiveness(
   volume: number | null | undefined,
@@ -90,6 +91,13 @@ export function calculateEffectiveness(
   }
   const v = Math.max(0, Math.min(100, volume));
   const d = Math.max(0, Math.min(100, difficulty));
-  // 60% weight on search volume, 40% on ease (100 - difficulty)
-  return Math.round(v * 0.6 + (100 - d) * 0.4);
+
+  // If there is zero search demand, effectiveness is 0 regardless of difficulty
+  if (v === 0) {
+    return 0;
+  }
+
+  // 60% base volume weight + 40% ease weight (100 - difficulty), scaled by volume percentage.
+  // This eliminates the artificial 40-point floor on zero/low demand keywords.
+  return Math.round((v * (100 - d * 0.4)) / 100);
 }
