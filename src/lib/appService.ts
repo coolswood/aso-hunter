@@ -918,12 +918,7 @@ export async function getKeywordSuggestions(
         let appsCount: number | null = null;
 
         if (analysis) {
-          const isAutocomplete = rawSuggestions.map((s) => s.toLowerCase()).includes(cand);
-          const vd = volumeAndDifficulty(
-            analysis.resultCount,
-            analysis.topAuthority,
-            isAutocomplete,
-          );
+          const vd = volumeAndDifficulty(analysis.resultCount, analysis.topAuthority);
           volume = vd.volume;
           difficulty = vd.difficulty;
           appsCount = analysis.resultCount;

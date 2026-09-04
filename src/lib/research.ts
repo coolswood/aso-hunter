@@ -281,42 +281,44 @@ export interface KeywordIdea {
 export function volumeAndDifficulty(
   resultCount: number,
   topAuthority: number,
-  isAutocomplete = false,
 ): { volume: number; difficulty: number } {
-  // If no apps found at all and no reviews
-  if (resultCount <= 0 && topAuthority <= 0) {
-    return { volume: isAutocomplete ? 35 : 0, difficulty: 0 };
-  }
+  // If zero relevant apps in title, there is no verified supply or demand
+  if (resultCount <= 0) return { volume: 0, difficulty: 0 };
 
-  // 1. Competitor Density (0-100): scale up to 30 relevant apps in title
-  const densityScore = Math.min(Math.log10(Math.max(0, resultCount) + 1) / Math.log10(30), 1) * 100;
+  // 1. Competitor Density (0-100): 0 for 1 app, scales to 100 for 25+ matching apps in title
+  const densityScore = Math.max(0, Math.min(100, (Math.log10(resultCount) / Math.log10(25)) * 100));
 
-  // 2. Audience Scale / Authority of top apps (0-100): scale up to 300,000 ratings
+  // 2. Audience Scale / Authority of top apps (0-100): negligible below 50 ratings, scales to 100 for 5M ratings
   const authorityScore =
-    Math.min(Math.log10(Math.max(0, topAuthority) + 1) / Math.log10(300000), 1) * 100;
+    topAuthority <= 50 ? 0 : Math.min(100, (Math.log10(topAuthority / 50) / 5) * 100);
 
-  // 3. Base volume balances density (65%) and authority/reach (35%)
-  let volume = densityScore * 0.65 + authorityScore * 0.35;
-
-  // 4. Brand Lift: if top authority is huge (> 15,000 ratings, authorityScore > 75)
-  // and there is at least one relevant app, lift volume to reflect massive brand search volume
-  if (authorityScore > 75 && resultCount >= 1) {
-    const brandLift = (authorityScore - 75) * 1.5;
-    const liftedVolume = densityScore * 0.25 + authorityScore * 0.75 + brandLift * 0.15;
-    volume = Math.max(volume, Math.min(98, liftedVolume));
+  let volume = 0;
+  if (densityScore === 0) {
+    // Only 1 app exists: volume is 0 unless it's a massive brand monopoly (e.g. Duolingo)
+    if (authorityScore >= 70) {
+      volume = Math.round(authorityScore * 0.92);
+    } else {
+      volume = 0;
+    }
+  } else {
+    // Balanced generic category query
+    volume = densityScore * 0.65 + authorityScore * 0.35;
+    if (densityScore >= 80) {
+      volume = Math.max(volume, densityScore * 0.8 + authorityScore * 0.2);
+    }
+    if (authorityScore > 65) {
+      const boost = (authorityScore - 65) * 0.4;
+      volume = Math.min(98, volume + boost);
+    }
+    volume = Math.round(Math.max(0, Math.min(100, volume)));
   }
 
-  // 5. Autocomplete guarantee: live store suggestions have verified search demand
-  if (isAutocomplete) {
-    volume = Math.max(volume, 35);
-  }
-
-  // Difficulty: 0-100 scale based on how tough the top authority is (150,000 threshold)
+  // Difficulty: 0-100 scale (negligible below 50 ratings, scales to 100 at 500k ratings)
   const difficulty = Math.round(
-    Math.min(Math.log10(Math.max(0, topAuthority) + 1) / Math.log10(150000), 1) * 100,
+    topAuthority <= 50 ? 0 : Math.min(100, (Math.log10(topAuthority / 50) / 4) * 100),
   );
 
-  return { volume: Math.round(Math.max(0, Math.min(100, volume))), difficulty };
+  return { volume, difficulty };
 }
 
 export async function scoreKeyword(
