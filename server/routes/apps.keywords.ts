@@ -6,6 +6,7 @@ import {
   addKeyword,
   autoDetectKeywords,
   deleteKeywordsBulk,
+  getKeywordSuggestions,
   getLatestGlobalScan,
   recomputeHealth,
   refreshKeywordsMetrics,
@@ -15,6 +16,19 @@ import { parseCountryParam, resolveCountry } from "@/lib/countryParam";
 import { isUniqueViolation } from "./_lib";
 
 const keywordsRoutes = new Hono();
+
+keywordsRoutes.get("/suggestions", async (c) => {
+  const id = c.req.param("id")!;
+  const term = c.req.query("term")?.trim();
+  const country = parseCountryParam(c.req.query("country")) ?? "us";
+  if (!term) return c.json({ suggestions: [] });
+  try {
+    const suggestions = await getKeywordSuggestions(id, term, country);
+    return c.json({ suggestions });
+  } catch (e) {
+    return c.json({ error: (e as Error).message, suggestions: [] }, 500);
+  }
+});
 
 keywordsRoutes.get("/", async (c) => {
   const id = c.req.param("id")!;

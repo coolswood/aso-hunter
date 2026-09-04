@@ -18,10 +18,6 @@ export default function AppShell({ children }: { children: ReactNode }) {
               Dashboard
               <span className="pointer-events-none absolute inset-x-0 -bottom-0.5 h-px scale-x-0 bg-accent transition-transform duration-200 group-hover:scale-x-100" />
             </Link>
-            <Link to="/search" className="group relative py-1 hover:text-foreground">
-              Keyword Search
-              <span className="pointer-events-none absolute inset-x-0 -bottom-0.5 h-px scale-x-0 bg-accent transition-transform duration-200 group-hover:scale-x-100" />
-            </Link>
             <Link
               to="/apps/new"
               className="rounded-lg bg-accent px-3.5 py-1.5 text-accent-foreground font-medium shadow-sm hover:shadow-md hover:-translate-y-px active:translate-y-0"

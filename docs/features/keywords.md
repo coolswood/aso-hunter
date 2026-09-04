@@ -25,12 +25,14 @@ UI (KeywordTable) ─► REST /api/apps/:id/keywords ─► appService.addKeywor
 | `src/lib/keywordMetrics.ts`                       | Чистые функции расчета Best Rank, Change Delta, Effectiveness Score      |
 | `src/components/keywords/KeywordMetricBadges.tsx` | Визуальные бейджи рангов, прогресс-бар популярности, индикаторы динамики |
 | `src/components/keywords/KeywordTable.tsx`        | Таблица с сортировкой, чекбоксами и массовыми действиями                 |
+| `src/components/keywords/KeywordSearchInput.tsx`  | Умный ввод с живыми подсказками стора, рангами приложения и метриками    |
 | `src/components/KeywordsSection.tsx`              | Контейнер с формой добавления и автодетектом                             |
-| `server/routes/apps.keywords.ts`                  | REST-маршруты CRUD, массового удаления и обновления метрик               |
+| `server/routes/apps.keywords.ts`                  | REST-маршруты CRUD, подсказок, массового удаления и обновления метрик    |
 
 ## API / MCP
 
 - `GET /api/apps/:id/keywords?country=us` — список ключевых слов сторфронта с историей замеров (до 30 точек).
+- `GET /api/apps/:id/keywords/suggestions?term=...&country=us` — живые подсказки стора с позициями и метриками.
 - `POST /api/apps/:id/keywords` — добавить ключевое слово (`{ term, country }`).
 - `POST /api/apps/:id/keywords/auto-detect` — автодетект ключей из заголовка/подзаголовка.
 - `DELETE /api/apps/:id/keywords/:keywordId` — удаление одного ключа.

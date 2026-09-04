@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { Copy, Sparkles, Tags } from "lucide-react";
 import KeywordsOverviewChart from "./KeywordsOverviewChart";
 import KeywordTable, { type KeywordWithRanks } from "./keywords/KeywordTable";
+import KeywordSearchInput from "./keywords/KeywordSearchInput";
 import type { StorePlatform } from "@/lib/stores/types";
 
 // Apple's App Store Connect "Keywords" field is a single comma-separated
@@ -58,7 +59,6 @@ export default function KeywordsSection({
   /** Re-fetches the app after keyword mutations */
   onChanged?: () => void;
 }) {
-  const [term, setTerm] = useState("");
   const [adding, setAdding] = useState(false);
   const [detecting, setDetecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -102,19 +102,18 @@ export default function KeywordsSection({
     }
   }
 
-  async function addKeyword() {
-    if (!term.trim()) return;
+  async function addKeyword(termToAdd: string) {
+    if (!termToAdd.trim()) return;
     setAdding(true);
     setError(null);
     try {
       const res = await fetch(`/api/apps/${appId}/keywords`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ term, country }),
+        body: JSON.stringify({ term: termToAdd, country }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to add keyword");
-      setTerm("");
       onChanged?.();
     } catch (e) {
       setError((e as Error).message);
@@ -125,22 +124,13 @@ export default function KeywordsSection({
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-2">
-        <input
-          value={term}
-          onChange={(e) => setTerm(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && addKeyword()}
-          placeholder="Add a keyword to track..."
-          className="flex-1 rounded-lg border border-border bg-card px-3 py-2 text-sm transition-colors focus:border-accent"
+      <div className="flex items-center gap-2">
+        <KeywordSearchInput
+          appId={appId}
+          country={country}
+          onAddKeyword={addKeyword}
+          adding={adding}
         />
-        <button
-          onClick={addKeyword}
-          disabled={adding}
-          title={`Track the keyword in the ${country} storefront (switch the market in the header above)`}
-          className="rounded-lg bg-accent text-accent-foreground px-4 py-2 text-sm font-medium shadow-sm hover:shadow-md hover:-translate-y-px active:translate-y-0 disabled:opacity-50 disabled:translate-y-0 disabled:shadow-none transition-transform"
-        >
-          {adding ? "Adding..." : "Track"}
-        </button>
         <button
           onClick={autoDetect}
           disabled={detecting}
@@ -148,7 +138,7 @@ export default function KeywordsSection({
           aria-label="Auto-detect keywords"
           className="inline-flex shrink-0 items-center justify-center rounded-lg border border-border p-2 hover:bg-card hover:border-accent disabled:opacity-50 transition-colors"
         >
-          <Sparkles className={`h-3.5 w-3.5 ${detecting ? "animate-pulse" : ""}`} />
+          <Sparkles className={`h-4 w-4 ${detecting ? "animate-pulse" : ""}`} />
         </button>
         {keywords.length > 0 && (
           <button
@@ -161,7 +151,7 @@ export default function KeywordsSection({
             aria-label="Copy keywords"
             className="inline-flex shrink-0 items-center justify-center rounded-lg border border-border p-2 hover:bg-card hover:border-accent transition-colors"
           >
-            <Copy className="h-3.5 w-3.5" />
+            <Copy className="h-4 w-4" />
           </button>
         )}
       </div>

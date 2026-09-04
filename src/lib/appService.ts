@@ -803,3 +803,89 @@ export async function deleteKeywordsBulk(appId: string, keywordIds: string[]) {
   await recomputeHealth(appId);
   return { deletedCount: deleted.length };
 }
+
+export interface KeywordSuggestionItem {
+  term: string;
+  rank: number | null;
+  volume: number | null;
+  difficulty: number | null;
+  appsCount: number | null;
+  isAlreadyTracked: boolean;
+}
+
+export async function getKeywordSuggestions(
+  appId: string,
+  term: string,
+  country = DEFAULT_COUNTRY,
+): Promise<KeywordSuggestionItem[]> {
+  const normalizedTerm = term.trim().toLowerCase();
+  if (!normalizedTerm) return [];
+
+  const app = await findApp(appId);
+  const targetCountry = country || app.country || DEFAULT_COUNTRY;
+
+  // Check which keywords are already tracked
+  const existing = await db.query.keywords.findMany({
+    where: and(eq(keywords.appId, appId), eq(keywords.country, targetCountry)),
+    columns: { term: true },
+  });
+  const trackedSet = new Set(existing.map((k) => k.term.toLowerCase()));
+
+  // 1. Fetch suggestions from store autocomplete
+  let rawSuggestions: string[] = [];
+  try {
+    rawSuggestions = await stores.autocompleteSuggestions(
+      app.platform,
+      normalizedTerm,
+      targetCountry,
+    );
+  } catch {
+    rawSuggestions = [];
+  }
+
+  // Include the user's raw term as the first candidate
+  const candidates = Array.from(
+    new Set([normalizedTerm, ...rawSuggestions.map((s) => s.trim().toLowerCase()).filter(Boolean)]),
+  ).slice(0, 6);
+
+  // 2. Concurrently check position and search metrics
+  return Promise.all(
+    candidates.map(async (cand) => {
+      try {
+        const [rank, analysis] = await Promise.all([
+          stores.findRank(app.platform, cand, app.storeId, targetCountry).catch(() => null),
+          stores.analyzeTerm(app.platform, cand, targetCountry).catch(() => null),
+        ]);
+
+        let volume: number | null = null;
+        let difficulty: number | null = null;
+        let appsCount: number | null = null;
+
+        if (analysis) {
+          const vd = volumeAndDifficulty(analysis.resultCount, analysis.topAuthority);
+          volume = vd.volume;
+          difficulty = vd.difficulty;
+          appsCount = analysis.resultCount;
+        }
+
+        return {
+          term: cand,
+          rank,
+          volume,
+          difficulty,
+          appsCount,
+          isAlreadyTracked: trackedSet.has(cand),
+        };
+      } catch {
+        return {
+          term: cand,
+          rank: null,
+          volume: null,
+          difficulty: null,
+          appsCount: null,
+          isAlreadyTracked: trackedSet.has(cand),
+        };
+      }
+    }),
+  );
+}
