@@ -4,6 +4,7 @@ export type {
   ChartOption,
   LineSeriesOption,
   MapSeriesOption,
+  PieSeriesOption,
   TopLevelFormatterParams,
 } from "./setup";
 export { resolveChartTheme, useChartTheme } from "./theme";

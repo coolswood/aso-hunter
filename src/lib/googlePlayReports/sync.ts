@@ -1,6 +1,6 @@
 import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { googlePlaySearchTerms, keywords } from "@/db/schema";
+import { googlePlaySearchTerms, googlePlayTrafficSources, keywords } from "@/db/schema";
 import { fetchReportCsv, listGcsFiles } from "./storage";
 
 export interface SyncGooglePlayResult {
@@ -8,6 +8,7 @@ export interface SyncGooglePlayResult {
   rowsInserted: number;
   uniqueTerms: number;
   totalAcquisitions: number;
+  trafficSourcesCount: number;
 }
 
 export interface GooglePlayCandidate {
@@ -22,6 +23,31 @@ export interface GooglePlayTermStats {
   acquisitions: number;
   visitors: number;
   conversionRate: number;
+}
+
+export interface TrafficSourceBreakdownItem {
+  source: string;
+  displayName: string;
+  acquisitions: number;
+  visitors: number;
+  conversionRate: number;
+  share: number;
+}
+
+export interface TrafficSourceTimelinePoint {
+  date: string;
+  search: number;
+  explore: number;
+  other: number;
+  total: number;
+}
+
+export interface TrafficSourcesResult {
+  totalAcquisitions: number;
+  totalVisitors: number;
+  overallConversionRate: number;
+  breakdown: TrafficSourceBreakdownItem[];
+  timeline: TrafficSourceTimelinePoint[];
 }
 
 const IGNORED_SEARCH_TERMS = new Set([
@@ -58,12 +84,39 @@ export async function syncGooglePlaySearchTerms(
   const filesToProcess = targetFiles.slice(0, limitMonths);
   let rowsInserted = 0;
   let totalAcquisitions = 0;
+  let trafficSourcesCount = 0;
   const uniqueTermsSet = new Set<string>();
 
   for (const filePath of filesToProcess) {
     try {
       const rows = await fetchReportCsv(filePath);
+      const sourceDailyMap = new Map<
+        string,
+        { date: string; source: string; acquisitions: number; visitors: number }
+      >();
+
       for (const row of rows) {
+        const date = row["Date"]?.trim();
+        const source = (row["Traffic source"] ?? "").trim();
+        const acquisitions = parseInt(row["Store listing acquisitions"] ?? "0", 10) || 0;
+        const visitors = parseInt(row["Store listing visitors"] ?? "0", 10) || 0;
+        const conversionRate = parseFloat(row["Store listing conversion rate"] ?? "0") || 0;
+
+        // 1. Aggregate traffic sources daily totals
+        if (date && source) {
+          const key = `${date}__${source}`;
+          const current = sourceDailyMap.get(key) ?? {
+            date,
+            source,
+            acquisitions: 0,
+            visitors: 0,
+          };
+          current.acquisitions += acquisitions;
+          current.visitors += visitors;
+          sourceDailyMap.set(key, current);
+        }
+
+        // 2. Search terms breakdown (filtered)
         const rawTerm = (row["Search term"] ?? "").trim();
         const normalizedTerm = rawTerm.toLowerCase();
 
@@ -71,12 +124,7 @@ export async function syncGooglePlaySearchTerms(
           continue;
         }
 
-        const date = row["Date"]?.trim();
         if (!date) continue;
-
-        const acquisitions = parseInt(row["Store listing acquisitions"] ?? "0", 10) || 0;
-        const visitors = parseInt(row["Store listing visitors"] ?? "0", 10) || 0;
-        const conversionRate = parseFloat(row["Store listing conversion rate"] ?? "0") || 0;
 
         uniqueTermsSet.add(normalizedTerm);
         totalAcquisitions += acquisitions;
@@ -107,6 +155,34 @@ export async function syncGooglePlaySearchTerms(
 
         rowsInserted++;
       }
+
+      // 3. Upsert aggregated daily traffic sources
+      for (const item of sourceDailyMap.values()) {
+        const conversionRate = item.visitors > 0 ? item.acquisitions / item.visitors : 0;
+        await db
+          .insert(googlePlayTrafficSources)
+          .values({
+            appId,
+            date: item.date,
+            source: item.source,
+            acquisitions: item.acquisitions,
+            visitors: item.visitors,
+            conversionRate,
+          })
+          .onConflictDoUpdate({
+            target: [
+              googlePlayTrafficSources.appId,
+              googlePlayTrafficSources.date,
+              googlePlayTrafficSources.source,
+            ],
+            set: {
+              acquisitions: item.acquisitions,
+              visitors: item.visitors,
+              conversionRate,
+            },
+          });
+        trafficSourcesCount++;
+      }
     } catch (e) {
       console.error(`Failed to process Google Play report file ${filePath}:`, e);
     }
@@ -117,6 +193,7 @@ export async function syncGooglePlaySearchTerms(
     rowsInserted,
     uniqueTerms: uniqueTermsSet.size,
     totalAcquisitions,
+    trafficSourcesCount,
   };
 }
 
@@ -257,12 +334,107 @@ export interface GooglePlayTermsResult {
     minDate: string | null;
     maxDate: string | null;
   };
+  sources: TrafficSourcesResult;
   terms: GooglePlayTermRow[];
 }
 
+function formatSourceName(raw: string): string {
+  const lower = raw.toLowerCase();
+  if (lower.includes("explore")) return "Google Play Explore";
+  if (lower.includes("search")) return "Google Play Search";
+  if (lower.includes("other")) return "Other / External";
+  return raw;
+}
+
 /**
- * Returns aggregated Google Play search terms filtered by optional date range,
- * including tracking status for the given app.
+ * Returns aggregated Google Play traffic sources breakdown and timeline for an app.
+ */
+export async function getGooglePlayTrafficSourcesByDateRange(
+  appId: string,
+  options: { startDate?: string; endDate?: string } = {},
+): Promise<TrafficSourcesResult> {
+  const conditions = [eq(googlePlayTrafficSources.appId, appId)];
+  if (options.startDate) {
+    conditions.push(sql`${googlePlayTrafficSources.date} >= ${options.startDate}`);
+  }
+  if (options.endDate) {
+    conditions.push(sql`${googlePlayTrafficSources.date} <= ${options.endDate}`);
+  }
+
+  const whereClause = and(...conditions);
+
+  // 1. Query source breakdown
+  const breakdownRows = await db
+    .select({
+      source: googlePlayTrafficSources.source,
+      acquisitions: sql<number>`COALESCE(SUM(${googlePlayTrafficSources.acquisitions}), 0)`,
+      visitors: sql<number>`COALESCE(SUM(${googlePlayTrafficSources.visitors}), 0)`,
+    })
+    .from(googlePlayTrafficSources)
+    .where(whereClause)
+    .groupBy(googlePlayTrafficSources.source)
+    .orderBy(desc(sql`SUM(${googlePlayTrafficSources.acquisitions})`));
+
+  let totalAcquisitions = 0;
+  let totalVisitors = 0;
+  for (const r of breakdownRows) {
+    totalAcquisitions += Number(r.acquisitions) || 0;
+    totalVisitors += Number(r.visitors) || 0;
+  }
+
+  const breakdown: TrafficSourceBreakdownItem[] = breakdownRows.map((r) => {
+    const acquisitions = Number(r.acquisitions) || 0;
+    const visitors = Number(r.visitors) || 0;
+    const conversionRate = visitors > 0 ? acquisitions / visitors : 0;
+    const share = totalAcquisitions > 0 ? (acquisitions / totalAcquisitions) * 100 : 0;
+    return {
+      source: r.source,
+      displayName: formatSourceName(r.source),
+      acquisitions,
+      visitors,
+      conversionRate,
+      share,
+    };
+  });
+
+  // 2. Query timeline points ordered by date asc
+  const timelineRows = await db
+    .select({
+      date: googlePlayTrafficSources.date,
+      source: googlePlayTrafficSources.source,
+      acquisitions: sql<number>`COALESCE(SUM(${googlePlayTrafficSources.acquisitions}), 0)`,
+    })
+    .from(googlePlayTrafficSources)
+    .where(whereClause)
+    .groupBy(googlePlayTrafficSources.date, googlePlayTrafficSources.source)
+    .orderBy(googlePlayTrafficSources.date);
+
+  const timelineMap = new Map<string, TrafficSourceTimelinePoint>();
+  for (const row of timelineRows) {
+    const d = row.date;
+    if (!timelineMap.has(d)) {
+      timelineMap.set(d, { date: d, search: 0, explore: 0, other: 0, total: 0 });
+    }
+    const pt = timelineMap.get(d)!;
+    const acq = Number(row.acquisitions) || 0;
+    pt.total += acq;
+    const lower = row.source.toLowerCase();
+    if (lower.includes("search")) pt.search += acq;
+    else if (lower.includes("explore")) pt.explore += acq;
+    else pt.other += acq;
+  }
+
+  return {
+    totalAcquisitions,
+    totalVisitors,
+    overallConversionRate: totalVisitors > 0 ? totalAcquisitions / totalVisitors : 0,
+    breakdown,
+    timeline: Array.from(timelineMap.values()),
+  };
+}
+
+/**
+ * Returns aggregated Google Play search terms and traffic sources filtered by date range.
  */
 export async function getGooglePlayTermsByDateRange(
   appId: string,
@@ -306,8 +478,8 @@ export async function getGooglePlayTermsByDateRange(
     .groupBy(googlePlaySearchTerms.searchTerm)
     .orderBy(desc(sql`SUM(${googlePlaySearchTerms.acquisitions})`));
 
-  let totalAcquisitions = 0;
-  let totalVisitors = 0;
+  let totalTermsAcquisitions = 0;
+  let totalTermsVisitors = 0;
   const terms: GooglePlayTermRow[] = [];
 
   for (const r of rows) {
@@ -318,8 +490,8 @@ export async function getGooglePlayTermsByDateRange(
     const visitors = Number(r.visitors) || 0;
     const conversionRate = visitors > 0 ? acquisitions / visitors : 0;
 
-    totalAcquisitions += acquisitions;
-    totalVisitors += visitors;
+    totalTermsAcquisitions += acquisitions;
+    totalTermsVisitors += visitors;
 
     const trackedCountries = trackedMap.get(term) ?? [];
     terms.push({
@@ -334,24 +506,47 @@ export async function getGooglePlayTermsByDateRange(
     });
   }
 
+  // 3. Query traffic sources breakdown and timeline
+  const sources = await getGooglePlayTrafficSourcesByDateRange(appId, options);
+
   // Query global min and max dates across all data for date range pickers
-  const [dateBounds] = await db
+  const [sourcesDateBounds] = await db
     .select({
-      minDate: sql<string | null>`MIN(${googlePlaySearchTerms.date})`,
-      maxDate: sql<string | null>`MAX(${googlePlaySearchTerms.date})`,
+      minDate: sql<string | null>`MIN(${googlePlayTrafficSources.date})`,
+      maxDate: sql<string | null>`MAX(${googlePlayTrafficSources.date})`,
     })
-    .from(googlePlaySearchTerms)
-    .where(eq(googlePlaySearchTerms.appId, appId));
+    .from(googlePlayTrafficSources)
+    .where(eq(googlePlayTrafficSources.appId, appId));
+
+  let minDate = sourcesDateBounds?.minDate ?? null;
+  let maxDate = sourcesDateBounds?.maxDate ?? null;
+
+  if (!minDate || !maxDate) {
+    const [termsDateBounds] = await db
+      .select({
+        minDate: sql<string | null>`MIN(${googlePlaySearchTerms.date})`,
+        maxDate: sql<string | null>`MAX(${googlePlaySearchTerms.date})`,
+      })
+      .from(googlePlaySearchTerms)
+      .where(eq(googlePlaySearchTerms.appId, appId));
+    minDate = minDate ?? termsDateBounds?.minDate ?? null;
+    maxDate = maxDate ?? termsDateBounds?.maxDate ?? null;
+  }
+
+  const finalAcquisitions =
+    sources.totalAcquisitions > 0 ? sources.totalAcquisitions : totalTermsAcquisitions;
+  const finalVisitors = sources.totalVisitors > 0 ? sources.totalVisitors : totalTermsVisitors;
 
   return {
     summary: {
-      totalAcquisitions,
-      totalVisitors,
-      overallConversionRate: totalVisitors > 0 ? totalAcquisitions / totalVisitors : 0,
+      totalAcquisitions: finalAcquisitions,
+      totalVisitors: finalVisitors,
+      overallConversionRate: finalVisitors > 0 ? finalAcquisitions / finalVisitors : 0,
       uniqueTermsCount: terms.length,
-      minDate: dateBounds?.minDate ?? null,
-      maxDate: dateBounds?.maxDate ?? null,
+      minDate,
+      maxDate,
     },
+    sources,
     terms,
   };
 }

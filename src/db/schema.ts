@@ -405,6 +405,33 @@ export const googlePlaySearchTerms = pgTable(
   ],
 );
 
+export const googlePlayTrafficSources = pgTable(
+  "GooglePlayTrafficSource",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId()),
+    appId: text("appId").notNull(),
+    date: text("date").notNull(),
+    source: text("source").notNull(),
+    acquisitions: integer("acquisitions").notNull().default(0),
+    visitors: integer("visitors").notNull().default(0),
+    conversionRate: doublePrecision("conversionRate").notNull().default(0),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex("GooglePlayTrafficSource_appId_date_source_key").on(t.appId, t.date, t.source),
+    index("GooglePlayTrafficSource_appId_date_idx").on(t.appId, t.date),
+    foreignKey({
+      name: "GooglePlayTrafficSource_appId_fkey",
+      columns: [t.appId],
+      foreignColumns: [apps.id],
+    })
+      .onDelete("cascade")
+      .onUpdate("cascade"),
+  ],
+);
+
 // ---------------------------------------------------------------------------
 // Relations (for the db.query.* relational API)
 // ---------------------------------------------------------------------------
@@ -418,6 +445,7 @@ export const appsRelations = relations(apps, ({ many }) => ({
   aiCopySuggestions: many(aiCopySuggestions),
   localizations: many(appLocalizations),
   googlePlaySearchTerms: many(googlePlaySearchTerms),
+  googlePlayTrafficSources: many(googlePlayTrafficSources),
 }));
 
 export const appLocalizationsRelations = relations(appLocalizations, ({ one }) => ({
@@ -489,6 +517,13 @@ export const aiCopySuggestionsRelations = relations(aiCopySuggestions, ({ one })
 export const googlePlaySearchTermsRelations = relations(googlePlaySearchTerms, ({ one }) => ({
   app: one(apps, {
     fields: [googlePlaySearchTerms.appId],
+    references: [apps.id],
+  }),
+}));
+
+export const googlePlayTrafficSourcesRelations = relations(googlePlayTrafficSources, ({ one }) => ({
+  app: one(apps, {
+    fields: [googlePlayTrafficSources.appId],
     references: [apps.id],
   }),
 }));

@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 import { SiGoogleplay } from "react-icons/si";
 import DateRangePicker from "@/components/ui/DateRangePicker";
+import TrafficSourcesChart from "./TrafficSourcesChart";
+import type { TrafficSourcesResult } from "@/lib/googlePlayReports";
 
 interface TermRow {
   term: string;
@@ -52,6 +54,7 @@ export default function StoreAnalyticsSection({
   const [searchQuery, setSearchQuery] = useState("");
   const [terms, setTerms] = useState<TermRow[]>([]);
   const [summary, setSummary] = useState<SummaryData | null>(null);
+  const [sources, setSources] = useState<TrafficSourcesResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [addingTerm, setAddingTerm] = useState<string | null>(null);
@@ -90,8 +93,13 @@ export default function StoreAnalyticsSection({
         const url = `/api/apps/${appId}/google-play/terms?${params.toString()}`;
         const res = await fetch(url);
         if (!res.ok) throw new Error("Failed to load Google Play search performance terms");
-        const data = (await res.json()) as { summary: SummaryData; terms: TermRow[] };
+        const data = (await res.json()) as {
+          summary: SummaryData;
+          sources?: TrafficSourcesResult;
+          terms: TermRow[];
+        };
         setSummary(data.summary);
+        setSources(data.sources ?? null);
         setTerms(data.terms ?? []);
       } catch (e) {
         setError((e as Error).message);
@@ -322,7 +330,7 @@ export default function StoreAnalyticsSection({
           <div className="text-2xl font-bold font-mono text-emerald-400">
             {summary ? `+${summary.totalAcquisitions.toLocaleString()}` : "—"}
           </div>
-          <p className="text-[11px] text-muted mt-1">Direct search installations</p>
+          <p className="text-[11px] text-muted mt-1">Total store installations</p>
         </div>
 
         <div className="rounded-xl border border-border/70 bg-card/60 p-4 shadow-xs">
@@ -333,7 +341,7 @@ export default function StoreAnalyticsSection({
           <div className="text-2xl font-bold font-mono text-foreground">
             {summary ? summary.totalVisitors.toLocaleString() : "—"}
           </div>
-          <p className="text-[11px] text-muted mt-1">Card impressions from search</p>
+          <p className="text-[11px] text-muted mt-1">Store listing visitors</p>
         </div>
 
         <div className="rounded-xl border border-border/70 bg-card/60 p-4 shadow-xs">
@@ -358,6 +366,11 @@ export default function StoreAnalyticsSection({
           <p className="text-[11px] text-muted mt-1">Unique query variants recorded</p>
         </div>
       </div>
+
+      {/* Traffic Sources Visualizations */}
+      {sources && sources.breakdown.length > 0 && (
+        <TrafficSourcesChart data={sources} startDate={startDate} endDate={endDate} />
+      )}
 
       {/* Table */}
       <div className="rounded-xl border border-border/80 bg-card/80 overflow-hidden shadow-xs">
