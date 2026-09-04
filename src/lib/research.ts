@@ -1,6 +1,7 @@
 import * as stores from "./stores";
 import type { StorePlatform, StoreSearchHit } from "./stores/types";
 import { getGoogleDemandSignal } from "./googleDemand";
+import { calculateEffectiveness } from "./keywordMetrics";
 
 export const STOPWORDS = new Set([
   "the",
@@ -378,8 +379,12 @@ export async function scoreKeywords(
     .map((r) => r.value);
 }
 
+/** Single shared opportunity formula: exactly what the UI's Effectiveness
+ * badge shows, so research/MCP rankings and the keyword table never disagree
+ * on which term is "best". Falls back to -1 when metrics are missing so such
+ * terms sort last. */
 export function keywordOpportunityRank(k: KeywordScore): number {
-  return k.volume - k.difficulty * 0.7;
+  return calculateEffectiveness(k.volume, k.difficulty) ?? -1;
 }
 
 export interface KeywordIdeaWithApps extends KeywordIdea {

@@ -126,8 +126,34 @@ export function ChangeDeltaBadge({
 }) {
   const { delta, direction } = calculateRankDelta(latest, previous);
 
-  if (direction === "none" || delta === null) {
+  if (direction === "none") {
     return <span className="text-muted text-xs">—</span>;
+  }
+
+  if (direction === "dropped") {
+    // Was ranked at the previous check, now absent from the tracked top-N
+    return (
+      <span
+        className="inline-flex items-center gap-0.5 text-xs font-semibold text-rose-400"
+        title="Dropped out of the tracked top results since the previous check"
+      >
+        <TrendingDown className="h-3 w-3" />
+        out
+      </span>
+    );
+  }
+
+  if (direction === "entered") {
+    // Was checked before and absent, now inside the tracked top-N
+    return (
+      <span
+        className="inline-flex items-center gap-0.5 text-xs font-semibold text-emerald-400"
+        title="Entered the tracked top results since the previous check"
+      >
+        <TrendingUp className="h-3 w-3" />
+        in
+      </span>
+    );
   }
 
   if (direction === "same") {

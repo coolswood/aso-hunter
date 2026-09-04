@@ -1,26 +1,30 @@
 import { describe, expect, it } from "bun:test";
 import {
   calculateGoogleDemandMultiplier,
+  resolveDemandMultiplier,
   type GoogleTrendsData,
   type GoogleWebSuggestData,
 } from "./googleDemand";
 
+const emptyWeb: GoogleWebSuggestData = {
+  suggestions: [],
+  maxRelevance: 0,
+  exactMatch: false,
+  matchingSuggestionsCount: 0,
+  isNavigational: false,
+  failed: false,
+};
+
+const emptyTrends: GoogleTrendsData = {
+  hasTopic: false,
+  isAppOrSoftware: false,
+  topics: [],
+  failed: false,
+};
+
 describe("calculateGoogleDemandMultiplier", () => {
   it("applies strong penalty (0.55) when Google Web Suggest has zero results and no trend topic", () => {
-    const web: GoogleWebSuggestData = {
-      suggestions: [],
-      maxRelevance: 0,
-      exactMatch: false,
-      matchingSuggestionsCount: 0,
-      isNavigational: false,
-    };
-    const trends: GoogleTrendsData = {
-      hasTopic: false,
-      isAppOrSoftware: false,
-      topics: [],
-    };
-
-    const multiplier = calculateGoogleDemandMultiplier(web, trends);
+    const multiplier = calculateGoogleDemandMultiplier(emptyWeb, emptyTrends);
     expect(multiplier).toBe(0.55);
   });
 
@@ -31,14 +35,10 @@ describe("calculateGoogleDemandMultiplier", () => {
       exactMatch: false,
       matchingSuggestionsCount: 0,
       isNavigational: false,
-    };
-    const trends: GoogleTrendsData = {
-      hasTopic: false,
-      isAppOrSoftware: false,
-      topics: [],
+      failed: false,
     };
 
-    const multiplier = calculateGoogleDemandMultiplier(web, trends);
+    const multiplier = calculateGoogleDemandMultiplier(web, emptyTrends);
     expect(multiplier).toBe(0.65);
   });
 
@@ -49,6 +49,7 @@ describe("calculateGoogleDemandMultiplier", () => {
       exactMatch: true,
       matchingSuggestionsCount: 3,
       isNavigational: true,
+      failed: false,
     };
     const trends: GoogleTrendsData = {
       hasTopic: true,
@@ -56,6 +57,7 @@ describe("calculateGoogleDemandMultiplier", () => {
       topics: [
         { mid: "/m/0zwk75g", title: "Telegram", type: "Скачиваемое программное обеспечение" },
       ],
+      failed: false,
     };
 
     const multiplier = calculateGoogleDemandMultiplier(web, trends);
@@ -70,15 +72,33 @@ describe("calculateGoogleDemandMultiplier", () => {
       exactMatch: true,
       matchingSuggestionsCount: 3,
       isNavigational: false,
+      failed: false,
     };
     const trends: GoogleTrendsData = {
       hasTopic: true,
       isAppOrSoftware: false,
       topics: [{ mid: "/m/123", title: "Sleep tracker", type: "Topic" }],
+      failed: false,
     };
 
     const multiplier = calculateGoogleDemandMultiplier(web, trends);
     expect(multiplier).toBeGreaterThan(1.0);
     expect(multiplier).toBeLessThanOrEqual(1.2);
+  });
+});
+
+describe("resolveDemandMultiplier", () => {
+  it("stays neutral (1.0) when either upstream fetch failed", () => {
+    // A 429/timeout is *unknown* demand, not zero demand - it must not
+    // halve the volume score the way the empty-data penalty would.
+    expect(resolveDemandMultiplier({ ...emptyWeb, failed: true }, emptyTrends)).toBe(1.0);
+    expect(resolveDemandMultiplier(emptyWeb, { ...emptyTrends, failed: true })).toBe(1.0);
+  });
+
+  it("delegates to the heuristic multiplier when both fetches succeeded", () => {
+    expect(resolveDemandMultiplier(emptyWeb, emptyTrends)).toBe(0.55);
+    expect(
+      resolveDemandMultiplier({ ...emptyWeb, failed: false }, { ...emptyTrends, failed: false }),
+    ).toBe(0.55);
   });
 });

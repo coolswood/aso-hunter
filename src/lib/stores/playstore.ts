@@ -1,6 +1,7 @@
 import gplay from "google-play-scraper";
 import * as cheerio from "cheerio";
 import type { StoreListing, StoreSearchHit, StoreReview } from "./types";
+import { median, titleMatchesAllWords } from "./relevance";
 import { withRetry } from "../withRetry";
 import { storefrontLang } from "../countries";
 
@@ -81,10 +82,7 @@ export async function fetchLocalizedListing(
   }
 }
 
-export async function lookupByAppId(
-  appId: string,
-  country = "us",
-): Promise<StoreListing | null> {
+export async function lookupByAppId(appId: string, country = "us"): Promise<StoreListing | null> {
   try {
     const app = await withRetry(() => gplay.app({ appId, country, lang: storefrontLang(country) }));
     return toListing(app);
@@ -118,7 +116,12 @@ export async function findRank(
   maxPositions = 100,
 ): Promise<number | null> {
   const results = await withRetry(() =>
-    gplay.search({ term, num: Math.min(maxPositions, 250), country, lang: storefrontLang(country) }),
+    gplay.search({
+      term,
+      num: Math.min(maxPositions, 250),
+      country,
+      lang: storefrontLang(country),
+    }),
   );
   const index = results.findIndex((r) => r.appId === appId);
   return index === -1 ? null : index + 1;
@@ -133,7 +136,11 @@ export async function findRank(
 // instead of fighting the ambient types.
 const SORT_NEWEST = 2;
 
-export async function fetchReviews(appId: string, country = "us", num = 100): Promise<StoreReview[]> {
+export async function fetchReviews(
+  appId: string,
+  country = "us",
+  num = 100,
+): Promise<StoreReview[]> {
   try {
     const { data } = await withRetry(() =>
       gplay.reviews({ appId, country, lang: storefrontLang(country), sort: SORT_NEWEST, num }),
@@ -141,8 +148,8 @@ export async function fetchReviews(appId: string, country = "us", num = 100): Pr
     return data.map((r) => ({
       externalId: r.id,
       rating: r.score ?? null,
-      title: r.title ? decodeEntities(r.title) ?? r.title : null,
-      text: r.text ? decodeEntities(r.text) ?? r.text : null,
+      title: r.title ? (decodeEntities(r.title) ?? r.title) : null,
+      text: r.text ? (decodeEntities(r.text) ?? r.text) : null,
       authorName: r.userName ?? null,
       version: r.version ?? null,
       reviewedAt: r.date ? new Date(r.date) : null,
@@ -164,12 +171,40 @@ export async function autocompleteSuggestions(
   }
 }
 
+// Rating counts barely move day to day, but analyzeTerm fetches up to 10 app
+// details per term and metric-refresh passes walk every tracked keyword - a
+// TTL cache removes most of that traffic (and most of the 429 risk).
+const RATING_COUNT_TTL_MS = 24 * 60 * 60 * 1000;
+const RATING_COUNT_CACHE_MAX = 2000;
+const ratingCountCache = new Map<string, { value: number; expiresAt: number }>();
+
+async function fetchRatingCount(appId: string, country: string, lang: string): Promise<number> {
+  const key = `${appId}:${country}`;
+  const cached = ratingCountCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+  try {
+    const app = await withRetry(() => gplay.app({ appId, country, lang }));
+    const value = app.ratings ?? 0;
+    if (ratingCountCache.size >= RATING_COUNT_CACHE_MAX) {
+      const oldest = ratingCountCache.keys().next().value;
+      if (oldest) ratingCountCache.delete(oldest);
+    }
+    ratingCountCache.set(key, { value, expiresAt: Date.now() + RATING_COUNT_TTL_MS });
+    return value;
+  } catch {
+    // Failures are not cached: a transient error shouldn't pin a 0 for 24h
+    return 0;
+  }
+}
+
 /** Single search pass used to derive both a demand proxy (relevant result
- * count) and a competitiveness proxy (average rating count of the top 10
+ * count) and a competitiveness proxy (median rating count of the top 10
  * relevant results). Raw result counts from Play search cluster near the
  * requested `num` for almost any query, so they don't actually distinguish a
  * real phrase from a nonsense one - filtering to listings whose title
- * contains every word of the term turns it into a real relevance signal. */
+ * contains every word of the term as a whole word turns it into a real
+ * relevance signal. The median (not the mean) keeps one mega-app among the
+ * top results from overstating the authority of the whole set. */
 export async function analyzeTerm(
   term: string,
   country = "us",
@@ -177,22 +212,15 @@ export async function analyzeTerm(
   const lang = storefrontLang(country);
   const basic = await withRetry(() => gplay.search({ term, num: 50, country, lang }));
   const words = term.toLowerCase().split(/\s+/).filter(Boolean);
-  const relevant = basic.filter((r) => words.every((w) => (r.title ?? "").toLowerCase().includes(w)));
+  const relevant = basic.filter((r) => titleMatchesAllWords(r.title, words));
 
   const topRelevant = relevant.slice(0, 10);
   let topAuthority = 0;
   if (topRelevant.length) {
     const ratings = await Promise.all(
-      topRelevant.map(async (r) => {
-        try {
-          const app = await withRetry(() => gplay.app({ appId: r.appId, country, lang }));
-          return app.ratings ?? 0;
-        } catch {
-          return 0;
-        }
-      }),
+      topRelevant.map((r) => fetchRatingCount(r.appId, country, lang)),
     );
-    topAuthority = ratings.reduce((a, b) => a + b, 0) / ratings.length;
+    topAuthority = median(ratings);
   }
   return { resultCount: relevant.length, topAuthority };
 }

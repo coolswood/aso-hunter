@@ -1,5 +1,11 @@
 import { describe, expect, it } from "bun:test";
-import { calculateBestRank, calculateEffectiveness, calculateRankDelta } from "./keywordMetrics";
+import {
+  calculateBestRank,
+  calculateEffectiveness,
+  calculateRankDelta,
+  calibrateVolumeWithRealDemand,
+  realDemandScore,
+} from "./keywordMetrics";
 
 describe("calculateBestRank", () => {
   it("returns nulls when no ranks exist", () => {
@@ -32,10 +38,20 @@ describe("calculateBestRank", () => {
 });
 
 describe("calculateRankDelta", () => {
-  it("returns none when latest or previous is null", () => {
-    expect(calculateRankDelta(null, 5)).toEqual({ delta: null, direction: "none" });
-    expect(calculateRankDelta(5, null)).toEqual({ delta: null, direction: "none" });
+  it("returns none when there is nothing to compare against", () => {
+    expect(calculateRankDelta(null, null)).toEqual({ delta: null, direction: "none" });
     expect(calculateRankDelta(undefined, undefined)).toEqual({ delta: null, direction: "none" });
+    expect(calculateRankDelta(5, undefined)).toEqual({ delta: null, direction: "none" });
+  });
+
+  it("marks a previously ranked term that lost its rank as dropped", () => {
+    // Was #5 at the previous check, now absent from the tracked top-N
+    expect(calculateRankDelta(null, 5)).toEqual({ delta: null, direction: "dropped" });
+  });
+
+  it("marks a previously absent term that gained a rank as entered", () => {
+    // Was explicitly checked-and-absent (null), now ranked #5
+    expect(calculateRankDelta(5, null)).toEqual({ delta: null, direction: "entered" });
   });
 
   it("returns same when positions are equal", () => {
@@ -84,5 +100,40 @@ describe("calculateEffectiveness", () => {
   it("clamps out-of-bounds input values to 0-100", () => {
     expect(calculateEffectiveness(120, -10)).toBe(100);
     expect(calculateEffectiveness(-20, 150)).toBe(0);
+  });
+});
+
+describe("realDemandScore", () => {
+  it("returns 0 for zero/negative visitors", () => {
+    expect(realDemandScore(0)).toBe(0);
+    expect(realDemandScore(-5)).toBe(0);
+  });
+
+  it("maps visitor counts onto the 0-100 log scale", () => {
+    expect(realDemandScore(100)).toBe(40); // log10(101) ≈ 2
+    expect(realDemandScore(10_000)).toBe(80); // log10(10_001) ≈ 4
+  });
+
+  it("saturates at 100", () => {
+    expect(realDemandScore(1_000_000)).toBe(100);
+  });
+});
+
+describe("calibrateVolumeWithRealDemand", () => {
+  it("keeps the heuristic untouched when there is no real data", () => {
+    expect(calibrateVolumeWithRealDemand(42, undefined)).toBe(42);
+    expect(calibrateVolumeWithRealDemand(42, 0)).toBe(42);
+    expect(calibrateVolumeWithRealDemand(null, undefined)).toBeNull();
+  });
+
+  it("never lowers the heuristic below measured demand", () => {
+    // Measured 10k visitors (score 80) beats a heuristic estimate of 30
+    expect(calibrateVolumeWithRealDemand(30, 10_000)).toBe(80);
+    // But a strong heuristic is not deflated by modest real traffic
+    expect(calibrateVolumeWithRealDemand(90, 100)).toBe(90);
+  });
+
+  it("fills in a score when the heuristic is missing but demand is measured", () => {
+    expect(calibrateVolumeWithRealDemand(null, 10_000)).toBe(80);
   });
 });

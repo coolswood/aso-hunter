@@ -24,7 +24,7 @@ UI (KeywordTable, GooglePlayCandidates) ─► REST /api/apps/:id/keywords, /api
 
 | Файл                                               | Роль                                                                          |
 | -------------------------------------------------- | ----------------------------------------------------------------------------- |
-| `src/lib/keywordMetrics.ts`                        | Чистые функции расчета Best Rank, Change Delta, Effectiveness Score           |
+| `src/lib/keywordMetrics.ts`                        | Чистые функции расчета Best Rank, Change Delta (up/down/entered/dropped), Effectiveness Score, калибровки volume реальным спросом |
 | `src/lib/googleDemand.ts`                          | Запросы к Google Web Suggest и Google Trends Topics с кэшированием            |
 | `src/lib/bulkKeywords.ts`                          | Чистый парсер списка ключевых фраз (разделение по \n и запятым, дедупликация) |
 | `src/lib/googlePlayReports/`                       | Модуль синхронизации отчетов Google Play Console: auth, storage, csv, sync    |
@@ -42,7 +42,7 @@ UI (KeywordTable, GooglePlayCandidates) ─► REST /api/apps/:id/keywords, /api
 
 - `GET /api/apps/:id/keywords?country=us` — список ключевых слов сторфронта с историей замеров (до 30 точек) и метриками `googlePlayStats`.
 - `GET /api/apps/:id/keywords/suggestions?term=...&country=us` — живые подсказки стора с позициями и метриками.
-- `GET /api/apps/:id/google-play/candidates` — список запросов из Play Console с инсталлами, которых еще нет в трекинге.
+- `GET /api/apps/:id/google-play/candidates` — запросы из Play Console, которых еще нет в трекинге; сортировка по установкам за последние 30 дней отчетных данных (`recentAcquisitions`), рядом `prevAcquisitions` для оценки роста.
 - `GET /api/apps/:id/google-play/summary` — агрегированная сводка установок и поисковых запросов Google Play.
 - `POST /api/apps/:id/google-play/sync` — запуск синхронизации свежих отчетов из GCS бакета.
 - `POST /api/apps/:id/keywords` — добавить ключевое слово (`{ term, country }`).
@@ -61,8 +61,17 @@ UI (KeywordTable, GooglePlayCandidates) ─► REST /api/apps/:id/keywords, /api
 ## Инварианты и подводные камни
 
 - **Сторфронт привязан к строке**: каждый ключ трекается в конкретной стране (`country`). Поиск и ранги проверяются строго в этом сторфронте.
-- **История рангов**: массив `ranks` возвращается отсортированным по `checkedAt DESC` (нулевой элемент — самый свежий).
+- **История рангов**: массив `ranks` возвращается отсортированным по `checkedAt DESC` (нулевой элемент — самый свежий). Дельта Change различает `entered`/`dropped` (вход в топ-N окно и выпадение из него) помимо `up`/`down`/`same`.
 - **Разделение слоев**: `keywordMetrics.ts` — абсолютно чистый клиентский модуль без серверных импортов (cheerio, stores, drizzle).
+- **Формула приоритета одна**: research/MCP (`keywordOpportunityRank`) и UI-бейдж Effectiveness считают через `calculateEffectiveness` — приоритизации нигде не расходятся.
+
+## Как считаются метрики (кратко)
+
+- **Popularity (volume)**: эвристика из `volumeAndDifficulty` (плотность релевантных тайтлов × авторитет топ-10, лог-шкалы) × Google-множитель, затем **калибровка реальным спросом** Play Console (`calibrateVolumeWithRealDemand`: измеренные посетители за последние 90 дней доступных отчетов могут поднять оценку, но не опустить — измеренный спрос не дисконтируется оценкой). Применяется в `addKeyword`, `trackKeyword`, `refreshKeywordsMetrics`, `getKeywordSuggestions`.
+- **Релевантность и авторитет**: `src/lib/stores/relevance.ts` — матчинг слов запроса по границе слов (не подстрокой: «ai» больше не матчит «rain»), `median` вместо среднего (один «кит» среди топ-10 не завышает difficulty). Обе платформы (Play/App Store) используют одни хелперы.
+- **Кэш рейтингов**: `playstore.ts` кэширует `appId → ratings` на 24 ч — массовые пересчеты метрик не гоняют сотни запросов деталей.
+- **Google-множитель**: сбой запроса к Google (429/таймаут) — это *неизвестный* спрос, не нулевой: `resolveDemandMultiplier` возвращает нейтральный 1.0, и ошибочные сигналы не кэшируются (`failed: true` в данных).
+- **Кандидаты Play Console**: сортировка по установкам за последние 30 дней доступных отчетов (`recentAcquisitions`), затем lifetime; `prevAcquisitions` — база для бейджа роста `×N`. Окна считаются от `MAX(date)` (отчеты приходят с задержкой), `shiftIsoDate` — чистый хелпер в `googlePlayReports/dates.ts`. GP-статистика — мировая (в экспортах нет разбивки по странам).
 
 ## Связи
 

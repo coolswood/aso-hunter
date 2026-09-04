@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { volumeAndDifficulty } from "./research";
+import { calculateEffectiveness } from "./keywordMetrics";
+import { keywordOpportunityRank, volumeAndDifficulty } from "./research";
 
 describe("volumeAndDifficulty", () => {
   it("returns 0 volume and 0 difficulty when no apps found (e.g. дневник с ии)", () => {
@@ -50,5 +51,20 @@ describe("volumeAndDifficulty", () => {
     // Difficulty remains dependent on competition/authority, not search multiplier
     expect(penalized.difficulty).toBe(base.difficulty);
     expect(boosted.difficulty).toBe(base.difficulty);
+  });
+});
+
+describe("keywordOpportunityRank", () => {
+  it("uses the same formula as the UI Effectiveness badge", () => {
+    const k = { term: "coin identifier", volume: 70, difficulty: 30, rank: 4 };
+    // Valid numeric inputs always yield a number from calculateEffectiveness
+    const expected = calculateEffectiveness(70, 30) ?? -1;
+    expect(keywordOpportunityRank(k)).toBe(expected);
+  });
+
+  it("ranks high-demand easy terms above low-demand tough ones", () => {
+    const good = { term: "good", volume: 80, difficulty: 20, rank: null };
+    const bad = { term: "bad", volume: 20, difficulty: 80, rank: null };
+    expect(keywordOpportunityRank(good)).toBeGreaterThan(keywordOpportunityRank(bad));
   });
 });

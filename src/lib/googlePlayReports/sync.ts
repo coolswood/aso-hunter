@@ -1,6 +1,7 @@
 import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { googlePlaySearchTerms, googlePlayTrafficSources, keywords } from "@/db/schema";
+import { shiftIsoDate } from "./dates";
 import { fetchReportCsv, listGcsFiles } from "./storage";
 
 export interface SyncGooglePlayResult {
@@ -13,10 +14,16 @@ export interface SyncGooglePlayResult {
 
 export interface GooglePlayCandidate {
   term: string;
+  /** Lifetime totals across all synced reports. */
   acquisitions: number;
   visitors: number;
   conversionRate: number;
+  firstSeenDate: string;
   lastSeenDate: string;
+  /** Installs in the last 30 days of available report data. */
+  recentAcquisitions: number;
+  /** Installs in the 30 days before that - the baseline for growth. */
+  prevAcquisitions: number;
 }
 
 export interface GooglePlayTermStats {
@@ -197,8 +204,24 @@ export async function syncGooglePlaySearchTerms(
   };
 }
 
+/** Freshest synced report date for an app. Play Console reports land with a
+ * delay, so recency windows are anchored here rather than at "today" - the
+ * last 30 days of *available data* always cover the newest report. Returns
+ * null when the app has no synced search terms at all. */
+async function latestTermDataDate(appId: string): Promise<string | null> {
+  const [row] = await db
+    .select({ maxDate: sql<string | null>`MAX(${googlePlaySearchTerms.date})` })
+    .from(googlePlaySearchTerms)
+    .where(eq(googlePlaySearchTerms.appId, appId));
+  return row?.maxDate ?? null;
+}
+
 /**
- * Returns Google Play search terms that are NOT yet in the tracked keywords for this app.
+ * Returns Google Play search terms that are NOT yet in the tracked keywords
+ * for this app, ordered by recent momentum first: installs from the last 30
+ * days of available data, then lifetime installs as a tie-breaker. A query
+ * that stopped converting months ago shouldn't outrank one bringing installs
+ * right now just because its lifetime total is bigger.
  */
 export async function getGooglePlayCandidates(
   appId: string,
@@ -212,18 +235,30 @@ export async function getGooglePlayCandidates(
 
   const trackedTerms = new Set(tracked.map((t) => t.term.trim().toLowerCase()));
 
-  // Aggregate stats per search term from googlePlaySearchTerms
+  const anchorDate = await latestTermDataDate(appId);
+  if (!anchorDate) return [];
+
+  // Recent window: [anchor - 29d, anchor]; previous window: the 30 days before it.
+  const recentFrom = shiftIsoDate(anchorDate, -29);
+  const prevFrom = shiftIsoDate(anchorDate, -59);
+  const prevTo = shiftIsoDate(anchorDate, -30);
+  const recentSum = sql<number>`COALESCE(SUM(CASE WHEN ${googlePlaySearchTerms.date} >= ${recentFrom} THEN ${googlePlaySearchTerms.acquisitions} ELSE 0 END), 0)`;
+  const prevSum = sql<number>`COALESCE(SUM(CASE WHEN ${googlePlaySearchTerms.date} >= ${prevFrom} AND ${googlePlaySearchTerms.date} <= ${prevTo} THEN ${googlePlaySearchTerms.acquisitions} ELSE 0 END), 0)`;
+
   const rows = await db
     .select({
       term: googlePlaySearchTerms.searchTerm,
       acquisitions: sql<number>`SUM(${googlePlaySearchTerms.acquisitions})`,
       visitors: sql<number>`SUM(${googlePlaySearchTerms.visitors})`,
+      firstSeenDate: sql<string>`MIN(${googlePlaySearchTerms.date})`,
       lastSeenDate: sql<string>`MAX(${googlePlaySearchTerms.date})`,
+      recentAcquisitions: recentSum,
+      prevAcquisitions: prevSum,
     })
     .from(googlePlaySearchTerms)
     .where(eq(googlePlaySearchTerms.appId, appId))
     .groupBy(googlePlaySearchTerms.searchTerm)
-    .orderBy(desc(sql`SUM(${googlePlaySearchTerms.acquisitions})`));
+    .orderBy(desc(recentSum), desc(sql`SUM(${googlePlaySearchTerms.acquisitions})`));
 
   const candidates: GooglePlayCandidate[] = [];
 
@@ -246,7 +281,10 @@ export async function getGooglePlayCandidates(
       acquisitions,
       visitors,
       conversionRate,
+      firstSeenDate: row.firstSeenDate ?? "",
       lastSeenDate: row.lastSeenDate ?? "",
+      recentAcquisitions: Number(row.recentAcquisitions) || 0,
+      prevAcquisitions: Number(row.prevAcquisitions) || 0,
     });
   }
 
@@ -255,10 +293,25 @@ export async function getGooglePlayCandidates(
 
 /**
  * Returns a map of aggregated Google Play stats for all search terms of an app.
+ * With `windowDays`, only the most recent N days of available data are
+ * aggregated (anchored at the freshest synced report date, since Play Console
+ * reports land with a delay) - used to calibrate volume against *current*
+ * demand rather than lifetime totals.
  */
 export async function getGooglePlayStatsMap(
   appId: string,
+  options: { windowDays?: number } = {},
 ): Promise<Map<string, GooglePlayTermStats>> {
+  const conditions = [eq(googlePlaySearchTerms.appId, appId)];
+
+  if (options.windowDays !== undefined) {
+    const anchorDate = await latestTermDataDate(appId);
+    if (!anchorDate) return new Map();
+    conditions.push(
+      sql`${googlePlaySearchTerms.date} >= ${shiftIsoDate(anchorDate, -(options.windowDays - 1))}`,
+    );
+  }
+
   const rows = await db
     .select({
       term: googlePlaySearchTerms.searchTerm,
@@ -266,7 +319,7 @@ export async function getGooglePlayStatsMap(
       visitors: sql<number>`SUM(${googlePlaySearchTerms.visitors})`,
     })
     .from(googlePlaySearchTerms)
-    .where(eq(googlePlaySearchTerms.appId, appId))
+    .where(and(...conditions))
     .groupBy(googlePlaySearchTerms.searchTerm);
 
   const statsMap = new Map<string, GooglePlayTermStats>();

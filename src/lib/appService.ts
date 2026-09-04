@@ -15,6 +15,8 @@ import type { StorePlatform, StoreListing } from "@/lib/stores/types";
 import { computeHealthReport } from "@/lib/health";
 import { extractSeedTerms, scoreKeywordIdea, volumeAndDifficulty } from "@/lib/research";
 import { getGoogleDemandSignal } from "@/lib/googleDemand";
+import { calibrateVolumeWithRealDemand } from "@/lib/keywordMetrics";
+import { getGooglePlayStatsMap, type GooglePlayTermStats } from "@/lib/googlePlayReports";
 import {
   computeReviewAnalysis,
   GENERIC_SENTIMENT_WORDS,
@@ -279,7 +281,7 @@ export async function addKeyword(
   // If metrics or rank were not pre-calculated (e.g. user typed a raw query),
   // fetch them synchronously so the newly tracked keyword is immediately complete
   if (volume === null || difficulty === null || appsCount === null || position === undefined) {
-    const [foundRank, analysis, demandSignal] = await Promise.all([
+    const [foundRank, analysis, demandSignal, realDemand] = await Promise.all([
       position !== undefined
         ? position
         : stores.findRank(app.platform, normalizedTerm, app.storeId, country).catch(() => null),
@@ -289,6 +291,7 @@ export async function addKeyword(
       volume !== null && difficulty !== null
         ? null
         : getGoogleDemandSignal(normalizedTerm, country).catch(() => null),
+      recentPlayDemandMap(app),
     ]);
 
     if (position === undefined) {
@@ -301,6 +304,10 @@ export async function addKeyword(
       difficulty = vd.difficulty;
       appsCount = analysis.resultCount;
     }
+    // Measured Play Console traffic beats the estimate even when the store
+    // analysis failed (analysis === null leaves volume null - real demand
+    // still fills it in).
+    volume = calibrateVolumeWithRealDemand(volume, realDemand.get(normalizedTerm)?.visitors);
   }
 
   const [keyword] = await db
@@ -383,6 +390,20 @@ export async function autoDetectKeywords(appId: string, country = DEFAULT_COUNTR
   return added;
 }
 
+/** Real Play Console demand for the app's own tracked terms over the most
+ * recent 90 days of available report data. Used to calibrate the heuristic
+ * volume score: measured installs/visitors beat a store-search estimate.
+ * Worldwide totals (Play Console exports have no per-country search split),
+ * best-effort - an empty map just leaves the heuristic untouched. */
+async function recentPlayDemandMap(app: App): Promise<Map<string, GooglePlayTermStats>> {
+  if (app.platform !== "ANDROID") return new Map();
+  try {
+    return await getGooglePlayStatsMap(app.id, { windowDays: 90 });
+  } catch {
+    return new Map();
+  }
+}
+
 /** Records the app's (and every competitor's) current rank for one keyword.
  * The storefront is always the keyword's own `country` - it travels with the
  * keyword row, so callers can't accidentally check a US rank for a keyword
@@ -395,9 +416,10 @@ async function trackKeyword(app: App, keywordId: string): Promise<number | null>
   // Enrich keyword metrics (volume, difficulty, appsCount) if missing or null
   try {
     if (keyword.volume === null || keyword.difficulty === null || keyword.appsCount === null) {
-      const [analysis, demandSignal] = await Promise.all([
+      const [analysis, demandSignal, realDemand] = await Promise.all([
         stores.analyzeTerm(app.platform, keyword.term, keyword.country),
         getGoogleDemandSignal(keyword.term, keyword.country).catch(() => null),
+        recentPlayDemandMap(app),
       ]);
       const mult = demandSignal?.multiplier ?? 1.0;
       const { volume, difficulty } = volumeAndDifficulty(
@@ -405,9 +427,17 @@ async function trackKeyword(app: App, keywordId: string): Promise<number | null>
         analysis.topAuthority,
         mult,
       );
+      const calibratedVolume = calibrateVolumeWithRealDemand(
+        volume,
+        realDemand.get(keyword.term)?.visitors,
+      );
       await db
         .update(keywords)
-        .set({ volume, difficulty, appsCount: analysis.resultCount })
+        .set({
+          volume: calibratedVolume,
+          difficulty,
+          appsCount: analysis.resultCount,
+        })
         .where(eq(keywords.id, keyword.id));
     }
   } catch {
@@ -840,6 +870,9 @@ export async function refreshKeywordsMetrics(appId: string, country?: string) {
       : eq(keywords.appId, appId),
   });
 
+  // One real-demand map for the whole pass - no per-keyword report queries
+  const realDemand = await recentPlayDemandMap(app);
+
   let updatedCount = 0;
   for (const kw of appKeywords) {
     try {
@@ -853,9 +886,13 @@ export async function refreshKeywordsMetrics(appId: string, country?: string) {
         analysis.topAuthority,
         mult,
       );
+      const calibratedVolume = calibrateVolumeWithRealDemand(
+        volume,
+        realDemand.get(kw.term)?.visitors,
+      );
       await db
         .update(keywords)
-        .set({ volume, difficulty, appsCount: analysis.resultCount })
+        .set({ volume: calibratedVolume, difficulty, appsCount: analysis.resultCount })
         .where(eq(keywords.id, kw.id));
       updatedCount++;
     } catch {
@@ -980,6 +1017,10 @@ export async function getKeywordSuggestions(
     new Set([normalizedTerm, ...rawSuggestions.map((s) => s.trim().toLowerCase()).filter(Boolean)]),
   ).slice(0, 6);
 
+  // Real Play Console demand shared by all candidates (same calibration the
+  // stored volume gets, so suggestions match what tracking will persist)
+  const realDemand = await recentPlayDemandMap(app);
+
   // 2. Concurrently check position and search metrics
   return Promise.all(
     candidates.map(async (cand) => {
@@ -1001,6 +1042,7 @@ export async function getKeywordSuggestions(
           difficulty = vd.difficulty;
           appsCount = analysis.resultCount;
         }
+        volume = calibrateVolumeWithRealDemand(volume, realDemand.get(cand)?.visitors);
 
         return {
           term: cand,

@@ -1,5 +1,6 @@
 import * as cheerio from "cheerio";
 import type { StoreListing, StoreSearchHit, StoreReview } from "./types";
+import { median, titleMatchesAllWords } from "./relevance";
 import { HttpError, isRetryableStatus, withRetry } from "../withRetry";
 
 const BASE = "https://itunes.apple.com";
@@ -63,9 +64,7 @@ function toListing(r: ITunesResult): StoreListing {
     screenshotUrls,
     languageCount: r.languageCodesISO2A?.length ?? null,
     version: r.version ?? null,
-    lastUpdated: r.currentVersionReleaseDate
-      ? new Date(r.currentVersionReleaseDate)
-      : null,
+    lastUpdated: r.currentVersionReleaseDate ? new Date(r.currentVersionReleaseDate) : null,
   };
 }
 
@@ -157,7 +156,8 @@ export async function autocompleteSuggestions(term: string, country = "us"): Pro
             cache: "no-store",
           },
         );
-        if (!res.ok) throw new HttpError(res.status, `autocomplete hints fetch failed: ${res.status}`);
+        if (!res.ok)
+          throw new HttpError(res.status, `autocomplete hints fetch failed: ${res.status}`);
         return (await res.json()) as { hints?: { term?: string }[] };
       },
       { shouldRetry: shouldRetryFetch },
@@ -214,12 +214,14 @@ export async function fetchReviews(bundleId: string, country = "us"): Promise<St
 }
 
 /** Single search call used to derive both a demand proxy (relevant result
- * count) and a competitiveness proxy (average rating count of the top 10
+ * count) and a competitiveness proxy (median rating count of the top 10
  * relevant results). Apple's search is fuzzy and returns a near-full page of
  * loosely related apps for almost any query, so raw resultCount saturates at
  * roughly the same value regardless of how specific or nonsensical the term
- * is. Filtering to listings whose name actually contains every word of the
- * term turns this into a real relevance signal instead of noise. */
+ * is. Filtering to listings whose name contains every word of the term as a
+ * whole word turns this into a real relevance signal instead of noise. The
+ * median (not the mean) keeps one mega-app among the top results from
+ * overstating the authority of the whole set. */
 export async function analyzeTerm(
   term: string,
   country = "us",
@@ -228,11 +230,7 @@ export async function analyzeTerm(
     `${BASE}/search?term=${encodeURIComponent(term)}&country=${country}&entity=software&limit=100`,
   );
   const words = term.toLowerCase().split(/\s+/).filter(Boolean);
-  const relevant = data.results.filter((r) => {
-    const name = (r.trackName ?? "").toLowerCase();
-    return words.every((w) => name.includes(w));
-  });
+  const relevant = data.results.filter((r) => titleMatchesAllWords(r.trackName, words));
   const top = relevant.slice(0, 10).map((r) => r.userRatingCount ?? 0);
-  const topAuthority = top.length ? top.reduce((a, b) => a + b, 0) / top.length : 0;
-  return { resultCount: relevant.length, topAuthority };
+  return { resultCount: relevant.length, topAuthority: median(top) };
 }

@@ -93,20 +93,20 @@ export default function KeywordTable({
           valB = b.ranks[0]?.position ?? 9999;
           break;
         case "change": {
-          const deltaA = calculateRankDelta(a.ranks[0]?.position, a.ranks[1]?.position);
-          const deltaB = calculateRankDelta(b.ranks[0]?.position, b.ranks[1]?.position);
-          valA =
-            deltaA.direction === "up"
-              ? (deltaA.delta ?? 0)
-              : deltaA.direction === "down"
-                ? -(deltaA.delta ?? 0)
-                : 0;
-          valB =
-            deltaB.direction === "up"
-              ? (deltaB.delta ?? 0)
-              : deltaB.direction === "down"
-                ? -(deltaB.delta ?? 0)
-                : 0;
+          // Entered/dropped map to the sort extremes: entering the tracked
+          // top-N is the best possible change, falling out of it the worst.
+          const sortValue = (delta: ReturnType<typeof calculateRankDelta>) =>
+            delta.direction === "up"
+              ? (delta.delta ?? 0)
+              : delta.direction === "down"
+                ? -(delta.delta ?? 0)
+                : delta.direction === "entered"
+                  ? 1000
+                  : delta.direction === "dropped"
+                    ? -1000
+                    : 0;
+          valA = sortValue(calculateRankDelta(a.ranks[0]?.position, a.ranks[1]?.position));
+          valB = sortValue(calculateRankDelta(b.ranks[0]?.position, b.ranks[1]?.position));
           break;
         }
         case "bestRank": {

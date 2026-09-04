@@ -6,6 +6,9 @@ export interface GoogleWebSuggestData {
   exactMatch: boolean;
   matchingSuggestionsCount: number;
   isNavigational: boolean;
+  /** True when the upstream request failed - the fields are a fallback, not
+   * a real "no interest" answer, and must not penalize the multiplier. */
+  failed: boolean;
 }
 
 export interface GoogleTrendsTopic {
@@ -18,6 +21,8 @@ export interface GoogleTrendsData {
   hasTopic: boolean;
   isAppOrSoftware: boolean;
   topics: GoogleTrendsTopic[];
+  /** True when the upstream request failed - see GoogleWebSuggestData.failed. */
+  failed: boolean;
 }
 
 export interface GoogleDemandSignal {
@@ -41,9 +46,23 @@ function getCacheKey(term: string, country: string): string {
 }
 
 /**
+ * Resolves the multiplier actually applied to volume. A failed upstream call
+ * means demand is *unknown*, not zero - returning the neutral 1.0 keeps a
+ * transient 429/timeout from halving the volume score.
+ */
+export function resolveDemandMultiplier(
+  web: GoogleWebSuggestData,
+  trends: GoogleTrendsData,
+): number {
+  if (web.failed || trends.failed) return 1.0;
+  return calculateGoogleDemandMultiplier(web, trends);
+}
+
+/**
  * Calculates a volume multiplier (0.5 to 1.3) based on Google search presence.
- * - Penalizes terms that have no presence in Google Web Suggest (0.55 - 0.65).
- * - Boosts recognized brands, high-relevance searches, and Google Trends software entities (up to 1.3).
+ * Penalizes terms that have no presence in Google Web Suggest (0.55 - 0.65).
+ * Boosts recognized brands, high-relevance searches, and Google Trends software entities (up to 1.3).
+ * Only meaningful for successfully fetched data - see resolveDemandMultiplier.
  */
 export function calculateGoogleDemandMultiplier(
   web: GoogleWebSuggestData,
@@ -103,6 +122,7 @@ export async function fetchGoogleWebSuggest(
     exactMatch: false,
     matchingSuggestionsCount: 0,
     isNavigational: false,
+    failed: true,
   };
 
   try {
@@ -157,6 +177,7 @@ export async function fetchGoogleWebSuggest(
       exactMatch,
       matchingSuggestionsCount,
       isNavigational,
+      failed: false,
     };
   } catch {
     return fallback;
@@ -177,6 +198,7 @@ export async function fetchGoogleTrendsSignal(
     hasTopic: false,
     isAppOrSoftware: false,
     topics: [],
+    failed: true,
   };
 
   try {
@@ -221,6 +243,7 @@ export async function fetchGoogleTrendsSignal(
       hasTopic: topics.length > 0,
       isAppOrSoftware,
       topics,
+      failed: false,
     };
   } catch {
     return fallback;
@@ -229,6 +252,9 @@ export async function fetchGoogleTrendsSignal(
 
 /**
  * Aggregates Google Web Suggest and Google Trends signals with caching.
+ * Only successfully fetched signals are cached - a failed fetch is unknown
+ * demand (neutral multiplier) and is retried on the next request instead of
+ * being pinned for 30 minutes.
  */
 export async function getGoogleDemandSignal(
   term: string,
@@ -245,8 +271,12 @@ export async function getGoogleDemandSignal(
     fetchGoogleTrendsSignal(term, country),
   ]);
 
-  const multiplier = calculateGoogleDemandMultiplier(webSuggest, trends);
+  const multiplier = resolveDemandMultiplier(webSuggest, trends);
   const data: GoogleDemandSignal = { webSuggest, trends, multiplier };
+
+  if (webSuggest.failed || trends.failed) {
+    return data;
+  }
 
   // Evict oldest if cache is too large
   if (demandCache.size >= MAX_CACHE_SIZE) {

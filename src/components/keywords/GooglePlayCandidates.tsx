@@ -4,10 +4,16 @@ import { SiGoogleplay } from "react-icons/si";
 
 interface Candidate {
   term: string;
+  /** Lifetime totals across all synced reports. */
   acquisitions: number;
   visitors: number;
   conversionRate: number;
+  firstSeenDate: string;
   lastSeenDate: string;
+  /** Installs in the last 30 days of available report data. */
+  recentAcquisitions: number;
+  /** Installs in the 30 days before that - baseline for growth. */
+  prevAcquisitions: number;
 }
 
 export default function GooglePlayCandidates({
@@ -128,8 +134,8 @@ export default function GooglePlayCandidates({
               </h3>
             </div>
             <p className="text-xs text-muted">
-              Search queries from your Google Play Console with verified installations not yet in
-              your tracker.
+              Search queries from your Google Play Console with verified installs not yet in your
+              tracker, newest installs first (last 30 days of report data).
             </p>
           </div>
         </div>
@@ -175,18 +181,33 @@ export default function GooglePlayCandidates({
         <div className="flex flex-wrap gap-2 pt-1">
           {candidates.map((c) => {
             const isAdding = addingTerm === c.term;
+            // Growth vs the previous 30-day window (null = no baseline yet)
+            const growth =
+              c.prevAcquisitions > 0 ? c.recentAcquisitions / c.prevAcquisitions : null;
+            const isGrowing = growth !== null && c.recentAcquisitions > c.prevAcquisitions;
             return (
               <div
                 key={c.term}
                 className="group inline-flex items-center gap-2 rounded-lg border border-border/80 bg-card/80 hover:border-emerald-500/40 px-3 py-1.5 text-xs transition-all shadow-xs"
+                title={`Last 30 days of report data: ${c.recentAcquisitions} installs (previous 30 days: ${c.prevAcquisitions}, lifetime: ${c.acquisitions})`}
               >
                 <span className="font-semibold text-foreground">&ldquo;{c.term}&rdquo;</span>
                 <span
-                  className="inline-flex items-center gap-0.5 text-[11px] font-mono text-emerald-400 font-semibold"
-                  title={`${c.visitors.toLocaleString()} visitors, ${(c.conversionRate * 100).toFixed(1)}% conversion`}
+                  className={`inline-flex items-center gap-0.5 text-[11px] font-mono font-semibold ${
+                    c.recentAcquisitions > 0 ? "text-emerald-400" : "text-muted"
+                  }`}
+                  title={`${c.recentAcquisitions} installs in the last 30 days of report data (previous 30 days: ${c.prevAcquisitions}, lifetime: ${c.acquisitions}); ${c.visitors.toLocaleString()} visitors, ${(c.conversionRate * 100).toFixed(1)}% conversion`}
                 >
-                  <TrendingUp className="h-3 w-3" />+{c.acquisitions.toLocaleString()}
+                  <TrendingUp className="h-3 w-3" />+{c.recentAcquisitions}
                 </span>
+                {isGrowing && (
+                  <span
+                    className="rounded-full bg-emerald-500/10 border border-emerald-500/30 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-400"
+                    title={`${c.recentAcquisitions} installs in the last 30 days vs ${c.prevAcquisitions} in the previous 30 days`}
+                  >
+                    ×{growth?.toFixed(1)}
+                  </span>
+                )}
                 <span className="text-[10px] text-muted font-mono">
                   {(c.conversionRate * 100).toFixed(1)}% CVR
                 </span>
