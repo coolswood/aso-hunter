@@ -30,6 +30,7 @@
 | Конкуренты                              | —                                                     | `server/routes/apps.competitors.ts`, `src/components/CompetitorsSection.tsx`                                                        |
 | Product health (PostHog overlay)        | —                                                     | `src/lib/posthogIntegration.ts`, `server/routes/apps.posthog.ts`, `src/components/ProductHealthChart.tsx`                           |
 | Поиск по сторам                         | —                                                     | `server/routes/search.ts`, `src/pages/SearchPage.tsx`, `src/pages/NewAppPage.tsx`                                                   |
+| Аналитика Google Play (Store Analytics) | [store-analytics.md](./features/store-analytics.md)   | `src/components/store-analytics/`, `src/components/ui/DateRangePicker.tsx`, `server/routes/apps.google-play.ts`                     |
 | MCP-сервер                              | —                                                     | `server/mcp.ts`                                                                                                                     |
 | Общая логика REST + MCP                 | —                                                     | `src/lib/appService.ts`                                                                                                             |
 

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowUpDown,
-  Calendar as CalendarIcon,
   Check,
   Eye,
   Plus,
@@ -12,6 +11,7 @@ import {
   Users,
 } from "lucide-react";
 import { SiGoogleplay } from "react-icons/si";
+import DateRangePicker from "@/components/ui/DateRangePicker";
 
 interface TermRow {
   term: string;
@@ -274,33 +274,22 @@ export default function StoreAnalyticsSection({
 
         {/* Custom Calendar Pickers & Search */}
         <div className="flex flex-wrap items-center gap-2.5">
-          <div className="inline-flex items-center gap-1.5 rounded-lg border border-border/80 bg-background/80 px-2.5 py-1 text-xs">
-            <CalendarIcon className="h-3.5 w-3.5 text-muted shrink-0" />
-            <span className="text-[11px] text-muted">From:</span>
-            <input
-              type="date"
-              value={startDate}
-              min={summary?.minDate ?? undefined}
-              max={endDate || (summary?.maxDate ?? undefined)}
-              onChange={(e) => {
-                setPreset("custom");
-                setStartDate(e.target.value);
-              }}
-              className="bg-transparent text-foreground outline-none text-xs cursor-pointer"
-            />
-            <span className="text-[11px] text-muted ml-1">To:</span>
-            <input
-              type="date"
-              value={endDate}
-              min={startDate || (summary?.minDate ?? undefined)}
-              max={summary?.maxDate ?? undefined}
-              onChange={(e) => {
-                setPreset("custom");
-                setEndDate(e.target.value);
-              }}
-              className="bg-transparent text-foreground outline-none text-xs cursor-pointer"
-            />
-          </div>
+          <DateRangePicker
+            startDate={startDate}
+            endDate={endDate}
+            minDate={summary?.minDate ?? undefined}
+            maxDate={summary?.maxDate ?? undefined}
+            onChange={(range) => {
+              setPreset("custom");
+              setStartDate(range.startDate);
+              setEndDate(range.endDate);
+            }}
+            onClear={() => {
+              setPreset("all");
+              setStartDate("");
+              setEndDate("");
+            }}
+          />
 
           <div className="relative flex-1 sm:w-56">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted" />
