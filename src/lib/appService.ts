@@ -14,6 +14,7 @@ import * as stores from "@/lib/stores";
 import type { StorePlatform, StoreListing } from "@/lib/stores/types";
 import { computeHealthReport } from "@/lib/health";
 import { extractSeedTerms, scoreKeywordIdea, volumeAndDifficulty } from "@/lib/research";
+import { getGoogleDemandSignal } from "@/lib/googleDemand";
 import {
   computeReviewAnalysis,
   GENERIC_SENTIMENT_WORDS,
@@ -278,20 +279,24 @@ export async function addKeyword(
   // If metrics or rank were not pre-calculated (e.g. user typed a raw query),
   // fetch them synchronously so the newly tracked keyword is immediately complete
   if (volume === null || difficulty === null || appsCount === null || position === undefined) {
-    const [foundRank, analysis] = await Promise.all([
+    const [foundRank, analysis, demandSignal] = await Promise.all([
       position !== undefined
         ? position
         : stores.findRank(app.platform, normalizedTerm, app.storeId, country).catch(() => null),
       volume !== null && difficulty !== null && appsCount !== null
         ? null
         : stores.analyzeTerm(app.platform, normalizedTerm, country).catch(() => null),
+      volume !== null && difficulty !== null
+        ? null
+        : getGoogleDemandSignal(normalizedTerm, country).catch(() => null),
     ]);
 
     if (position === undefined) {
       position = foundRank;
     }
     if (analysis) {
-      const vd = volumeAndDifficulty(analysis.resultCount, analysis.topAuthority);
+      const mult = demandSignal?.multiplier ?? 1.0;
+      const vd = volumeAndDifficulty(analysis.resultCount, analysis.topAuthority, mult);
       volume = vd.volume;
       difficulty = vd.difficulty;
       appsCount = analysis.resultCount;
@@ -390,10 +395,15 @@ async function trackKeyword(app: App, keywordId: string): Promise<number | null>
   // Enrich keyword metrics (volume, difficulty, appsCount) if missing or null
   try {
     if (keyword.volume === null || keyword.difficulty === null || keyword.appsCount === null) {
-      const analysis = await stores.analyzeTerm(app.platform, keyword.term, keyword.country);
+      const [analysis, demandSignal] = await Promise.all([
+        stores.analyzeTerm(app.platform, keyword.term, keyword.country),
+        getGoogleDemandSignal(keyword.term, keyword.country).catch(() => null),
+      ]);
+      const mult = demandSignal?.multiplier ?? 1.0;
       const { volume, difficulty } = volumeAndDifficulty(
         analysis.resultCount,
         analysis.topAuthority,
+        mult,
       );
       await db
         .update(keywords)
@@ -833,10 +843,15 @@ export async function refreshKeywordsMetrics(appId: string, country?: string) {
   let updatedCount = 0;
   for (const kw of appKeywords) {
     try {
-      const analysis = await stores.analyzeTerm(app.platform, kw.term, kw.country);
+      const [analysis, demandSignal] = await Promise.all([
+        stores.analyzeTerm(app.platform, kw.term, kw.country),
+        getGoogleDemandSignal(kw.term, kw.country).catch(() => null),
+      ]);
+      const mult = demandSignal?.multiplier ?? 1.0;
       const { volume, difficulty } = volumeAndDifficulty(
         analysis.resultCount,
         analysis.topAuthority,
+        mult,
       );
       await db
         .update(keywords)
@@ -908,9 +923,10 @@ export async function getKeywordSuggestions(
   return Promise.all(
     candidates.map(async (cand) => {
       try {
-        const [rank, analysis] = await Promise.all([
+        const [rank, analysis, demandSignal] = await Promise.all([
           stores.findRank(app.platform, cand, app.storeId, targetCountry).catch(() => null),
           stores.analyzeTerm(app.platform, cand, targetCountry).catch(() => null),
+          getGoogleDemandSignal(cand, targetCountry).catch(() => null),
         ]);
 
         let volume: number | null = null;
@@ -918,7 +934,8 @@ export async function getKeywordSuggestions(
         let appsCount: number | null = null;
 
         if (analysis) {
-          const vd = volumeAndDifficulty(analysis.resultCount, analysis.topAuthority);
+          const mult = demandSignal?.multiplier ?? 1.0;
+          const vd = volumeAndDifficulty(analysis.resultCount, analysis.topAuthority, mult);
           volume = vd.volume;
           difficulty = vd.difficulty;
           appsCount = analysis.resultCount;

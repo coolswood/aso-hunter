@@ -39,4 +39,16 @@ describe("volumeAndDifficulty", () => {
     expect(difficulty).toBeGreaterThanOrEqual(68);
     expect(difficulty).toBeLessThanOrEqual(95);
   });
+
+  it("adjusts volume according to googleMultiplier from web search validation", () => {
+    const base = volumeAndDifficulty(3, 5_000, 1.0);
+    const penalized = volumeAndDifficulty(3, 5_000, 0.55);
+    const boosted = volumeAndDifficulty(3, 5_000, 1.25);
+
+    expect(penalized.volume).toBeLessThan(base.volume);
+    expect(boosted.volume).toBeGreaterThan(base.volume);
+    // Difficulty remains dependent on competition/authority, not search multiplier
+    expect(penalized.difficulty).toBe(base.difficulty);
+    expect(boosted.difficulty).toBe(base.difficulty);
+  });
 });

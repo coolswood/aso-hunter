@@ -8,13 +8,14 @@
 - Компоненты: `src/components/KeywordsSection.tsx`, `src/components/keywords/KeywordTable.tsx`, `src/components/keywords/KeywordMetricBadges.tsx`
 - REST: `server/routes/apps.keywords.ts` (`/api/apps/:id/keywords`), `server/routes/track.ts` (`/api/track`)
 - MCP: `server/mcp.ts` (инструменты `add_keyword`, `auto_detect_keywords`)
-- Логика: `src/lib/keywordMetrics.ts` (чистые клиентские расчеты), `src/lib/appService.ts` (`trackKeyword`, `autoDetectKeywords`), `src/lib/research.ts` (`volumeAndDifficulty`)
+- Логика: `src/lib/keywordMetrics.ts` (чистые клиентские расчеты), `src/lib/appService.ts` (`trackKeyword`, `autoDetectKeywords`), `src/lib/research.ts` (`volumeAndDifficulty`), `src/lib/googleDemand.ts` (Google Web Suggest & Trends)
 
 ## Поток данных
 
 ```
 UI (KeywordTable) ─► REST /api/apps/:id/keywords ─► appService.addKeyword / trackKeyword
                                                         ├─► stores.findRank / analyzeTerm ─► App Store / Google Play
+                                                        ├─► googleDemand.getGoogleDemandSignal ─► Google Web & Trends
                                                         └─► Drizzle (@/db) ─► keywords, keywordRanks
 ```
 
@@ -23,6 +24,7 @@ UI (KeywordTable) ─► REST /api/apps/:id/keywords ─► appService.addKeywor
 | Файл                                              | Роль                                                                     |
 | ------------------------------------------------- | ------------------------------------------------------------------------ |
 | `src/lib/keywordMetrics.ts`                       | Чистые функции расчета Best Rank, Change Delta, Effectiveness Score      |
+| `src/lib/googleDemand.ts`                         | Запросы к Google Web Suggest и Google Trends Topics с кэшированием       |
 | `src/components/keywords/KeywordMetricBadges.tsx` | Визуальные бейджи рангов, прогресс-бар популярности, индикаторы динамики |
 | `src/components/keywords/KeywordTable.tsx`        | Таблица с сортировкой, чекбоксами и массовыми действиями                 |
 | `src/components/keywords/KeywordSearchInput.tsx`  | Умный ввод с живыми подсказками стора, рангами приложения и метриками    |

@@ -1,5 +1,6 @@
 import * as stores from "./stores";
 import type { StorePlatform, StoreSearchHit } from "./stores/types";
+import { getGoogleDemandSignal } from "./googleDemand";
 
 export const STOPWORDS = new Set([
   "the",
@@ -281,6 +282,7 @@ export interface KeywordIdea {
 export function volumeAndDifficulty(
   resultCount: number,
   topAuthority: number,
+  googleMultiplier = 1.0,
 ): { volume: number; difficulty: number } {
   // If zero relevant apps in title, there is no verified supply or demand
   if (resultCount <= 0) return { volume: 0, difficulty: 0 };
@@ -296,7 +298,7 @@ export function volumeAndDifficulty(
   if (densityScore === 0) {
     // Only 1 app exists: volume is 0 unless it's a massive brand monopoly (e.g. Duolingo)
     if (authorityScore >= 70) {
-      volume = Math.round(authorityScore * 0.92);
+      volume = Math.round(authorityScore * 0.92 * googleMultiplier);
     } else {
       volume = 0;
     }
@@ -310,6 +312,8 @@ export function volumeAndDifficulty(
       const boost = (authorityScore - 65) * 0.4;
       volume = Math.min(98, volume + boost);
     }
+    // Apply external Google demand validation multiplier
+    volume = volume * googleMultiplier;
     volume = Math.round(Math.max(0, Math.min(100, volume)));
   }
 
@@ -327,11 +331,16 @@ export async function scoreKeyword(
   storeId: string,
   country = "us",
 ): Promise<KeywordScore> {
-  const [{ resultCount, topAuthority }, rank] = await Promise.all([
+  const [{ resultCount, topAuthority }, rank, demandSignal] = await Promise.all([
     stores.analyzeTerm(platform, term, country),
     stores.findRank(platform, term, storeId, country),
+    getGoogleDemandSignal(term, country).catch(() => ({ multiplier: 1.0 })),
   ]);
-  return { term, ...volumeAndDifficulty(resultCount, topAuthority), rank };
+  return {
+    term,
+    ...volumeAndDifficulty(resultCount, topAuthority, demandSignal.multiplier),
+    rank,
+  };
 }
 
 /** Same volume/difficulty scoring as scoreKeyword, but for standalone keyword
@@ -344,8 +353,15 @@ export async function scoreKeywordIdea(
   term: string,
   country = "us",
 ): Promise<KeywordIdea> {
-  const { resultCount, topAuthority } = await stores.analyzeTerm(platform, term, country);
-  return { term, ...volumeAndDifficulty(resultCount, topAuthority), resultCount };
+  const [{ resultCount, topAuthority }, demandSignal] = await Promise.all([
+    stores.analyzeTerm(platform, term, country),
+    getGoogleDemandSignal(term, country).catch(() => ({ multiplier: 1.0 })),
+  ]);
+  return {
+    term,
+    ...volumeAndDifficulty(resultCount, topAuthority, demandSignal.multiplier),
+    resultCount,
+  };
 }
 
 export async function scoreKeywords(
