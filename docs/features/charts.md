@@ -13,26 +13,28 @@
 ```
 Компонент графика ─► useChartTheme() (цвета из CSS-переменных)
                   └► useMemo(option) ─► EChart (setOption, notMerge)
-WorldMap          ─► world-atlas (TopoJSON) ─► topojson-client ─► registerMap("world") ─► series type:"map"
+WorldMap          ─► world-atlas (TopoJSON) ─► topojson-client ─► normalizeWorldFeatures (разрез по 180°) ─► registerMap("world") ─► series type:"map"
 ```
 
 Данные приходят пропсами (`ranks`, `keywords`, `results`) или fetch'ем внутри компонента (`ProductHealthChart` → `/api/apps/:id/product-health`).
 
 ## Карта файлов
 
-| Файл                               | Роль                                                      |
-| ---------------------------------- | --------------------------------------------------------- |
-| `src/components/charts/EChart.tsx` | React-обёртка над echarts-инстансом (init/resize/dispose) |
-| `src/components/charts/setup.ts`   | модульная регистрация echarts + тип `ChartOption`         |
-| `src/components/charts/theme.ts`   | резолв CSS-переменных в конкретные цвета для canvas       |
-| `src/components/charts/tooltip.ts` | общий стиль HTML-тултипов                                 |
-| `src/components/WorldMap.tsx`      | гео-карта: ранги по странам, пороговые цвета              |
+| Файл                               | Роль                                                                            |
+| ---------------------------------- | ------------------------------------------------------------------------------- |
+| `src/components/charts/EChart.tsx` | React-обёртка над echarts-инстансом (init/resize/dispose)                       |
+| `src/components/charts/setup.ts`   | модульная регистрация echarts + тип `ChartOption`                               |
+| `src/components/charts/theme.ts`   | резолв CSS-переменных в конкретные цвета для canvas                             |
+| `src/components/charts/tooltip.ts` | общий стиль HTML-тултипов                                                       |
+| `src/components/WorldMap.tsx`      | гео-карта: ранги по странам, пороговые цвета                                    |
+| `src/lib/worldMapData.ts`          | нормализация TopoJSON/GeoJSON (разрез по 180° меридиану, исключение Антарктиды) |
 
 ## Инварианты и подводные камни
 
 - Цвета серий — фиксированные слоты `--series-1..8` (CVD-safe порядок), не переназначаются; максимум 8 серий (`MAX_SERIES`).
 - Ось рангов инвертирована (`inverse: true`), домен расширяется на ±1 от данных, минимум 1.
 - Позиции `null` («не в топе») соединяются линией (`connectNulls`).
+- Геометрии карты, пересекающие 180° антимеридиан (Россия, Фиджи), разрезаются на восточную и западную части через `src/lib/worldMapData.ts`, Антарктида исключается — иначе плоская проекция echarts соединяет противоположные края карты горизонтальными полосами через весь экран.
 
 ## Связи
 

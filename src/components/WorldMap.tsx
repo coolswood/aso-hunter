@@ -6,6 +6,7 @@ import type { Topology, GeometryCollection } from "topojson-specification";
 import type { Feature, Geometry } from "geojson";
 import * as isoCountries from "i18n-iso-countries";
 import worldTopology from "world-atlas/countries-110m.json";
+import { normalizeWorldFeatures } from "@/lib/worldMapData";
 import { echarts, EChart, shellTooltip, useChartTheme } from "./charts";
 import type { ChartOption, ChartTheme, TopLevelFormatterParams } from "./charts";
 
@@ -20,11 +21,14 @@ const WORLD_MAP = "world";
 const MAP_ASPECT_RATIO = "980 / 500";
 
 const topology = worldTopology as unknown as Topology;
-const countryFeatures = (
+const rawFeatures = (
   feature(topology, topology.objects.countries as GeometryCollection) as unknown as {
     features: Feature<Geometry>[];
   }
 ).features;
+// Cut antimeridian-crossing polygons (Russia, Fiji) and drop Antarctica so
+// planar equirectangular projection renders without horizontal stripes.
+const countryFeatures = normalizeWorldFeatures(rawFeatures);
 
 // ECharts geo maps consume GeoJSON while world-atlas ships TopoJSON - expand
 // once at module load and register globally. The cast bridges two structurally
