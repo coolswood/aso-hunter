@@ -32,3 +32,7 @@ bun-debug.log*
 .windsurf/
 .agents/
 skills-lock.json
+
+# google credentials and tokens
+config/google/
+config/**/*.json

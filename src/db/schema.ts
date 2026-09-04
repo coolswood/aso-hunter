@@ -378,6 +378,33 @@ export const aiCopySuggestions = pgTable(
   ],
 );
 
+export const googlePlaySearchTerms = pgTable(
+  "GooglePlaySearchTerm",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId()),
+    appId: text("appId").notNull(),
+    date: text("date").notNull(),
+    searchTerm: text("searchTerm").notNull(),
+    acquisitions: integer("acquisitions").notNull().default(0),
+    visitors: integer("visitors").notNull().default(0),
+    conversionRate: doublePrecision("conversionRate").notNull().default(0),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex("GooglePlaySearchTerm_appId_date_searchTerm_key").on(t.appId, t.date, t.searchTerm),
+    index("GooglePlaySearchTerm_appId_searchTerm_idx").on(t.appId, t.searchTerm),
+    foreignKey({
+      name: "GooglePlaySearchTerm_appId_fkey",
+      columns: [t.appId],
+      foreignColumns: [apps.id],
+    })
+      .onDelete("cascade")
+      .onUpdate("cascade"),
+  ],
+);
+
 // ---------------------------------------------------------------------------
 // Relations (for the db.query.* relational API)
 // ---------------------------------------------------------------------------
@@ -390,6 +417,7 @@ export const appsRelations = relations(apps, ({ many }) => ({
   reviews: many(reviews),
   aiCopySuggestions: many(aiCopySuggestions),
   localizations: many(appLocalizations),
+  googlePlaySearchTerms: many(googlePlaySearchTerms),
 }));
 
 export const appLocalizationsRelations = relations(appLocalizations, ({ one }) => ({
@@ -454,6 +482,13 @@ export const reviewsRelations = relations(reviews, ({ one }) => ({
 export const aiCopySuggestionsRelations = relations(aiCopySuggestions, ({ one }) => ({
   app: one(apps, {
     fields: [aiCopySuggestions.appId],
+    references: [apps.id],
+  }),
+}));
+
+export const googlePlaySearchTermsRelations = relations(googlePlaySearchTerms, ({ one }) => ({
+  app: one(apps, {
+    fields: [googlePlaySearchTerms.appId],
     references: [apps.id],
   }),
 }));

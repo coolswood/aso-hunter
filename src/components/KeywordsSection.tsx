@@ -3,6 +3,7 @@ import { Copy, ListPlus, Sparkles, Tags } from "lucide-react";
 import KeywordTable, { type KeywordWithRanks } from "./keywords/KeywordTable";
 import KeywordSearchInput from "./keywords/KeywordSearchInput";
 import BulkAddKeywordsModal from "./keywords/BulkAddKeywordsModal";
+import GooglePlayCandidates from "./keywords/GooglePlayCandidates";
 import type { StorePlatform } from "@/lib/stores/types";
 
 // Apple's App Store Connect "Keywords" field is a single comma-separated
@@ -186,6 +187,10 @@ export default function KeywordsSection({
       </div>
       {copyStatus && <div className="text-xs text-muted animate-fade-in-up">{copyStatus}</div>}
       {error && <div className="text-sm text-rose-500 animate-fade-in-up">{error}</div>}
+
+      {platform === "ANDROID" && (
+        <GooglePlayCandidates appId={appId} country={country} onKeywordsAdded={onChanged} />
+      )}
 
       {keywords.length === 0 ? (
         <div className="animate-fade-in-up flex flex-col items-center gap-2 py-8 text-center">

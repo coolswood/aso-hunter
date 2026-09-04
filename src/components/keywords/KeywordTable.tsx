@@ -29,15 +29,30 @@ export interface KeywordWithRanks {
   difficulty: number | null;
   appsCount?: number | null;
   ranks: { position: number | null; checkedAt: string | Date }[];
+  googlePlayStats?: {
+    acquisitions: number;
+    visitors: number;
+    conversionRate: number;
+  } | null;
 }
 
 type SortField =
-  "term" | "volume" | "difficulty" | "effectiveness" | "rank" | "change" | "bestRank" | "appsCount";
+  | "term"
+  | "volume"
+  | "difficulty"
+  | "effectiveness"
+  | "rank"
+  | "change"
+  | "bestRank"
+  | "appsCount"
+  | "gpInstalls"
+  | "gpCvr";
 
 type SortOrder = "asc" | "desc";
 
 export default function KeywordTable({
   appId,
+  platform,
   country,
   keywords,
   onChanged,
@@ -116,6 +131,14 @@ export default function KeywordTable({
         case "appsCount":
           valA = a.appsCount ?? -1;
           valB = b.appsCount ?? -1;
+          break;
+        case "gpInstalls":
+          valA = a.googlePlayStats?.acquisitions ?? -1;
+          valB = b.googlePlayStats?.acquisitions ?? -1;
+          break;
+        case "gpCvr":
+          valA = a.googlePlayStats?.conversionRate ?? -1;
+          valB = b.googlePlayStats?.conversionRate ?? -1;
           break;
       }
 
@@ -238,6 +261,34 @@ export default function KeywordTable({
                   />
                 </div>
               </th>
+              {platform === "ANDROID" && (
+                <>
+                  <th
+                    onClick={() => handleSort("gpInstalls")}
+                    className="py-3 px-3 cursor-pointer hover:text-foreground transition-colors text-right"
+                    title="Real acquisitions from Google Play Search"
+                  >
+                    <div className="inline-flex items-center justify-end gap-1">
+                      <span>GP INSTALLS</span>
+                      <ArrowUpDown
+                        className={`h-3 w-3 ${sortField === "gpInstalls" ? "text-accent" : "opacity-40"}`}
+                      />
+                    </div>
+                  </th>
+                  <th
+                    onClick={() => handleSort("gpCvr")}
+                    className="py-3 px-3 cursor-pointer hover:text-foreground transition-colors text-right"
+                    title="Store listing conversion rate for this search term"
+                  >
+                    <div className="inline-flex items-center justify-end gap-1">
+                      <span>GP CVR</span>
+                      <ArrowUpDown
+                        className={`h-3 w-3 ${sortField === "gpCvr" ? "text-accent" : "opacity-40"}`}
+                      />
+                    </div>
+                  </th>
+                </>
+              )}
               <th className="py-3 px-3 text-right">
                 <div className="inline-flex items-center justify-end gap-2">
                   <button
@@ -339,6 +390,41 @@ export default function KeywordTable({
                       <AppsCountBadge count={k.appsCount} />
                     </td>
 
+                    {/* Google Play Installs & CVR */}
+                    {platform === "ANDROID" && (
+                      <>
+                        <td className="py-2.5 px-3 text-right">
+                          {k.googlePlayStats && k.googlePlayStats.acquisitions > 0 ? (
+                            <span
+                              className="inline-flex items-center gap-1 font-semibold text-emerald-400 font-mono text-xs bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full"
+                              title={`${k.googlePlayStats.visitors.toLocaleString()} visitors, ${k.googlePlayStats.acquisitions.toLocaleString()} installs`}
+                            >
+                              +{k.googlePlayStats.acquisitions.toLocaleString()}
+                            </span>
+                          ) : (
+                            <span className="text-muted/40 font-mono text-xs">—</span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono text-xs">
+                          {k.googlePlayStats && k.googlePlayStats.conversionRate > 0 ? (
+                            <span
+                              className={
+                                k.googlePlayStats.conversionRate >= 0.3
+                                  ? "text-emerald-400 font-medium"
+                                  : k.googlePlayStats.conversionRate >= 0.15
+                                    ? "text-blue-400 font-medium"
+                                    : "text-muted"
+                              }
+                            >
+                              {(k.googlePlayStats.conversionRate * 100).toFixed(1)}%
+                            </span>
+                          ) : (
+                            <span className="text-muted/40">—</span>
+                          )}
+                        </td>
+                      </>
+                    )}
+
                     {/* Trend Sparkline + Expand History */}
                     <td className="py-2.5 px-3 text-right">
                       <div className="inline-flex items-center justify-end gap-2">
@@ -374,7 +460,7 @@ export default function KeywordTable({
                   {/* Expandable History Chart */}
                   {isOpen && (
                     <tr className="border-b border-border/80 bg-background/50">
-                      <td colSpan={9} className="p-3 sm:p-4">
+                      <td colSpan={platform === "ANDROID" ? 11 : 9} className="p-3 sm:p-4">
                         <div className="rounded-lg border border-border/60 bg-card/70 p-4 shadow-xs">
                           <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-border/40 pb-2.5">
                             <div className="flex items-center gap-2">

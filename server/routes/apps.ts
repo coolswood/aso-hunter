@@ -23,6 +23,8 @@ import researchRoutes from "./apps.research";
 import reviewsRoutes from "./apps.reviews";
 import aiSuggestionsRoutes from "./apps.ai-suggestions";
 import syncRoutes from "./apps.sync";
+import googlePlayRoutes from "./apps.google-play";
+import { getGooglePlayStatsMap } from "@/lib/googlePlayReports";
 
 const appsApp = new Hono();
 
@@ -153,8 +155,14 @@ appsApp.get("/:id", async (c) => {
   if (!app) return c.json({ error: "Not found" }, 404);
   // Country-scoped view (shared with MCP get_app): keywords and competitors
   // of that storefront only, competitor ranks trimmed to those keywords.
-  if (!country) return c.json({ app });
-  return c.json({ app: filterAppDetailByCountry(app, country) });
+  const detail = country ? filterAppDetailByCountry(app, country) : app;
+  const statsMap = await getGooglePlayStatsMap(id);
+  const enrichedKeywords = detail.keywords.map((k) => ({
+    ...k,
+    googlePlayStats: statsMap.get(k.term.trim().toLowerCase()) ?? null,
+  }));
+
+  return c.json({ app: { ...detail, keywords: enrichedKeywords } });
 });
 
 appsApp.patch("/:id", async (c) => {
@@ -191,5 +199,6 @@ appsApp.route("/:id/research", researchRoutes);
 appsApp.route("/:id/reviews", reviewsRoutes);
 appsApp.route("/:id/ai-suggestions", aiSuggestionsRoutes);
 appsApp.route("/:id/sync", syncRoutes);
+appsApp.route("/:id/google-play", googlePlayRoutes);
 
 export default appsApp;
