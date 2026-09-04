@@ -120,6 +120,7 @@ export const keywords = pgTable(
     country: text("country").notNull().default("us"),
     volume: integer("volume"),
     difficulty: integer("difficulty"),
+    appsCount: integer("appsCount"),
     createdAt: createdAt(),
   },
   (t) => [

@@ -5,8 +5,10 @@ import { keywordRanks, keywords } from "@/db/schema";
 import {
   addKeyword,
   autoDetectKeywords,
+  deleteKeywordsBulk,
   getLatestGlobalScan,
   recomputeHealth,
+  refreshKeywordsMetrics,
   runGlobalScan,
 } from "@/lib/appService";
 import { parseCountryParam, resolveCountry } from "@/lib/countryParam";
@@ -58,6 +60,22 @@ keywordsRoutes.post("/auto-detect", async (c) => {
   const country = resolveCountry(typeof body.country === "string" ? body.country : null, "us");
   const added = await autoDetectKeywords(id, country);
   return c.json({ added });
+});
+
+keywordsRoutes.post("/refresh-metrics", async (c) => {
+  const id = c.req.param("id")!;
+  const country = parseCountryParam(c.req.query("country")) ?? undefined;
+  const result = await refreshKeywordsMetrics(id, country);
+  return c.json(result);
+});
+
+keywordsRoutes.delete("/bulk", async (c) => {
+  const id = c.req.param("id")!;
+  const body = await c.req.json().catch(() => ({}));
+  const ids = Array.isArray(body.ids) ? (body.ids as string[]) : [];
+  if (ids.length === 0) return c.json({ deletedCount: 0 });
+  const result = await deleteKeywordsBulk(id, ids);
+  return c.json(result);
 });
 
 keywordsRoutes.delete("/:keywordId", async (c) => {

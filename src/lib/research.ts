@@ -2,14 +2,37 @@ import * as stores from "./stores";
 import type { StorePlatform, StoreSearchHit } from "./stores/types";
 
 export const STOPWORDS = new Set([
-  "the", "a", "an", "and", "or", "for", "of", "to", "in", "on", "with", "your",
-  "app", "apps", "free", "best", "new", "get", "all", "you", "is", "by", "&",
+  "the",
+  "a",
+  "an",
+  "and",
+  "or",
+  "for",
+  "of",
+  "to",
+  "in",
+  "on",
+  "with",
+  "your",
+  "app",
+  "apps",
+  "free",
+  "best",
+  "new",
+  "get",
+  "all",
+  "you",
+  "is",
+  "by",
+  "&",
   // Generic marketing filler that shows up in casual title/subtitle copy
   // ("...in this fun adventure game!") but is never itself a real search
   // term - same reasoning as excluding "free"/"best"/"new" above.
-  "this", "that", "fun", "great",
+  "this",
+  "that",
+  "fun",
+  "great",
 ]);
-
 
 export function extractSeedTerms(text: string | null | undefined, max = 8): string[] {
   if (!text) return [];
@@ -126,7 +149,10 @@ export function extractUnicodeSeedTerms(text: string | null | undefined, max = 6
     .replace(/[^\p{L}\p{N}\s]/gu, " ")
     .split(/\s+/)
     .filter(
-      (w) => w.length >= 4 && !LOCALE_STOPWORDS.has(w) && !ADVERB_SUFFIXES.some((suf) => w.endsWith(suf)),
+      (w) =>
+        w.length >= 4 &&
+        !LOCALE_STOPWORDS.has(w) &&
+        !ADVERB_SUFFIXES.some((suf) => w.endsWith(suf)),
     );
 
   // Longer, more distinctive words make better autocomplete seeds than
@@ -159,7 +185,10 @@ function extractUnicodeKeywordPhrases(text: string | null | undefined, max = 6):
     .replace(/[^\p{L}\p{N}\s]/gu, " ")
     .split(/\s+/)
     .filter(
-      (w) => w.length >= 3 && !LOCALE_STOPWORDS.has(w) && !ADVERB_SUFFIXES.some((suf) => w.endsWith(suf)),
+      (w) =>
+        w.length >= 3 &&
+        !LOCALE_STOPWORDS.has(w) &&
+        !ADVERB_SUFFIXES.some((suf) => w.endsWith(suf)),
     );
 
   const seenPair = new Set<string>();
@@ -205,7 +234,9 @@ export async function discoverLocaleKeywords(
   if (seeds.length === 0) return [];
 
   const lists = await Promise.all(
-    seeds.map((seed) => stores.autocompleteSuggestions(platform, seed, country, lang).catch(() => [])),
+    seeds.map((seed) =>
+      stores.autocompleteSuggestions(platform, seed, country, lang).catch(() => []),
+    ),
   );
 
   const seedSet = new Set(seeds);
@@ -247,9 +278,14 @@ export interface KeywordIdea {
  * like it had identical demand. Filtering first means a real phrase like
  * "coin identifier" scores very differently from a bolted-together one like
  * "numisma widget" that no actual listing targets. */
-function volumeAndDifficulty(resultCount: number, topAuthority: number): { volume: number; difficulty: number } {
+export function volumeAndDifficulty(
+  resultCount: number,
+  topAuthority: number,
+): { volume: number; difficulty: number } {
   const volume = Math.round(Math.min(Math.log10(resultCount + 1) / Math.log10(40), 1) * 100);
-  const difficulty = Math.round(Math.min(Math.log10(topAuthority + 1) / Math.log10(200000), 1) * 100);
+  const difficulty = Math.round(
+    Math.min(Math.log10(topAuthority + 1) / Math.log10(200000), 1) * 100,
+  );
   return { volume, difficulty };
 }
 
@@ -286,7 +322,9 @@ export async function scoreKeywords(
   storeId: string,
   country = "us",
 ): Promise<KeywordScore[]> {
-  const settled = await Promise.allSettled(terms.map((term) => scoreKeyword(platform, term, storeId, country)));
+  const settled = await Promise.allSettled(
+    terms.map((term) => scoreKeyword(platform, term, storeId, country)),
+  );
   return settled
     .filter((r): r is PromiseFulfilledResult<KeywordScore> => r.status === "fulfilled")
     .map((r) => r.value);
@@ -323,7 +361,10 @@ export async function discoverKeywordIdeas(
   );
   const local = expandCandidates(seeds.length > 0 ? seeds : [term], cap);
 
-  const candidates = Array.from(new Set([term, ...autocompleteLists.flat(), ...local])).slice(0, cap);
+  const candidates = Array.from(new Set([term, ...autocompleteLists.flat(), ...local])).slice(
+    0,
+    cap,
+  );
 
   const settled = await Promise.allSettled(
     candidates.map(async (candidate): Promise<KeywordIdeaWithApps> => {

@@ -1,42 +1,8 @@
-import { Fragment, useRef, useState } from "react";
-import { ChevronDown, Copy, Minus, Sparkles, Tags, TrendingDown, TrendingUp } from "lucide-react";
-import { SiAppstore, SiGoogleplay } from "react-icons/si";
-import RankSparkline from "./RankSparkline";
-import RankHistoryChart from "./RankHistoryChart";
+import { useRef, useState } from "react";
+import { Copy, Sparkles, Tags } from "lucide-react";
 import KeywordsOverviewChart from "./KeywordsOverviewChart";
-import { appStoreSearchUrl, playStoreSearchUrl } from "@/lib/storeLinks";
+import KeywordTable, { type KeywordWithRanks } from "./keywords/KeywordTable";
 import type { StorePlatform } from "@/lib/stores/types";
-
-function RankDelta({ latest, previous }: { latest: number | null; previous: number | null }) {
-  if (latest === null || previous === null) return null;
-  const delta = previous - latest;
-  if (delta === 0) {
-    return (
-      <span className="inline-flex items-center gap-0.5 text-xs text-muted">
-        <Minus className="h-3 w-3" />
-      </span>
-    );
-  }
-  const improved = delta > 0;
-  return (
-    <span
-      className="inline-flex items-center gap-0.5 text-xs font-medium"
-      style={{ color: improved ? "var(--success)" : "var(--danger)" }}
-    >
-      {improved ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-      {Math.abs(delta)}
-    </span>
-  );
-}
-
-interface KeywordWithRanks {
-  id: string;
-  term: string;
-  country: string;
-  volume: number | null;
-  difficulty: number | null;
-  ranks: { position: number | null; checkedAt: string | Date }[];
-}
 
 // Apple's App Store Connect "Keywords" field is a single comma-separated
 // string capped at 100 characters (per locale) - Google Play has no
@@ -89,26 +55,20 @@ export default function KeywordsSection({
    * in it, and `keywords` arrive pre-filtered to it by the server. */
   country: string;
   keywords: KeywordWithRanks[];
-  /** Re-fetches the app after keyword mutations (was router.refresh()
-   * against the server component in the Next.js app). */
+  /** Re-fetches the app after keyword mutations */
   onChanged?: () => void;
 }) {
   const [term, setTerm] = useState("");
   const [adding, setAdding] = useState(false);
   const [detecting, setDetecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState<string | null>(null);
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  async function copyKeywords() {
+  async function copyKeywords(termsToCopy?: string[]) {
+    const terms = termsToCopy ?? keywords.map((k) => k.term);
     const limit = platform === "IOS" ? APPLE_KEYWORDS_LIMIT : undefined;
-    // All rows belong to the globally selected storefront - exactly the
-    // per-locale list the App Store Connect Keywords field expects.
-    const field = buildKeywordField(
-      keywords.map((k) => k.term),
-      limit,
-    );
+    const field = buildKeywordField(terms, limit);
     try {
       await navigator.clipboard.writeText(field.text);
       setCopyStatus(
@@ -163,11 +123,6 @@ export default function KeywordsSection({
     }
   }
 
-  async function removeKeyword(keywordId: string) {
-    await fetch(`/api/apps/${appId}/keywords/${keywordId}`, { method: "DELETE" });
-    onChanged?.();
-  }
-
   return (
     <div className="space-y-4">
       <div className="flex gap-2">
@@ -182,7 +137,7 @@ export default function KeywordsSection({
           onClick={addKeyword}
           disabled={adding}
           title={`Track the keyword in the ${country} storefront (switch the market in the header above)`}
-          className="rounded-lg bg-accent text-accent-foreground px-4 py-2 text-sm font-medium shadow-sm hover:shadow-md hover:-translate-y-px active:translate-y-0 disabled:opacity-50 disabled:translate-y-0 disabled:shadow-none"
+          className="rounded-lg bg-accent text-accent-foreground px-4 py-2 text-sm font-medium shadow-sm hover:shadow-md hover:-translate-y-px active:translate-y-0 disabled:opacity-50 disabled:translate-y-0 disabled:shadow-none transition-transform"
         >
           {adding ? "Adding..." : "Track"}
         </button>
@@ -191,27 +146,27 @@ export default function KeywordsSection({
           disabled={detecting}
           title={detecting ? "Detecting..." : "Auto-detect keywords from your title and subtitle"}
           aria-label="Auto-detect keywords"
-          className="inline-flex shrink-0 items-center justify-center rounded-lg border border-border p-2 hover:bg-card hover:border-accent disabled:opacity-50"
+          className="inline-flex shrink-0 items-center justify-center rounded-lg border border-border p-2 hover:bg-card hover:border-accent disabled:opacity-50 transition-colors"
         >
           <Sparkles className={`h-3.5 w-3.5 ${detecting ? "animate-pulse" : ""}`} />
         </button>
         {keywords.length > 0 && (
           <button
-            onClick={copyKeywords}
+            onClick={() => copyKeywords()}
             title={
               platform === "IOS"
                 ? "Copy for App Store: joins every tracked keyword into one comma-separated list, packed to fit the App Store Connect Keywords field's 100-character limit, and copies it."
                 : "Copy keywords: joins every tracked keyword into one comma-separated list and copies it."
             }
             aria-label="Copy keywords"
-            className="inline-flex shrink-0 items-center justify-center rounded-lg border border-border p-2 hover:bg-card hover:border-accent"
+            className="inline-flex shrink-0 items-center justify-center rounded-lg border border-border p-2 hover:bg-card hover:border-accent transition-colors"
           >
             <Copy className="h-3.5 w-3.5" />
           </button>
         )}
       </div>
       {copyStatus && <div className="text-xs text-muted animate-fade-in-up">{copyStatus}</div>}
-      {error && <div className="text-sm text-red-500 animate-fade-in-up">{error}</div>}
+      {error && <div className="text-sm text-rose-500 animate-fade-in-up">{error}</div>}
 
       {keywords.length > 1 && (
         <div className="animate-fade-in-up">
@@ -238,94 +193,14 @@ export default function KeywordsSection({
           </div>
         </div>
       ) : (
-        <div className="rounded-xl border border-border bg-card overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-left text-muted">
-                <th className="p-3 font-medium">Keyword</th>
-                <th className="p-3 font-medium">Current rank</th>
-                <th className="p-3 font-medium">Trend</th>
-                <th className="p-3 font-medium"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {keywords.map((k, i) => {
-                const chronological = [...k.ranks].reverse();
-                const latest = k.ranks[0]?.position ?? null;
-                const previous = k.ranks[1]?.position ?? null;
-                const isOpen = expanded === k.id;
-                return (
-                  <Fragment key={k.id}>
-                    <tr
-                      className="animate-fade-in-up border-b border-border last:border-0 transition-colors hover:bg-background"
-                      style={{ animationDelay: `${Math.min(i, 15) * 30}ms` }}
-                    >
-                      <td className="p-3">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium">{k.term}</span>
-                          <a
-                            href={appStoreSearchUrl(k.term, k.country)}
-                            target="_blank"
-                            rel="noreferrer"
-                            title="Search on the App Store"
-                            aria-label={`Search "${k.term}" on the App Store`}
-                            className="text-muted hover:text-accent"
-                          >
-                            <SiAppstore className="h-3.5 w-3.5" />
-                          </a>
-                          <a
-                            href={playStoreSearchUrl(k.term)}
-                            target="_blank"
-                            rel="noreferrer"
-                            title="Search on Google Play"
-                            aria-label={`Search "${k.term}" on Google Play`}
-                            className="text-muted hover:text-accent"
-                          >
-                            <SiGoogleplay className="h-3.5 w-3.5" />
-                          </a>
-                        </div>
-                      </td>
-                      <td className="p-3">
-                        <div className="flex items-center gap-2">
-                          <span>{latest !== null ? `#${latest}` : "Not ranked"}</span>
-                          <RankDelta latest={latest} previous={previous} />
-                        </div>
-                      </td>
-                      <td className="p-3">
-                        <button
-                          onClick={() => setExpanded(isOpen ? null : k.id)}
-                          className="inline-flex items-center gap-1.5 hover:text-accent"
-                          aria-expanded={isOpen}
-                          title="Show rank history"
-                        >
-                          <RankSparkline positions={chronological.map((r) => r.position)} />
-                          <ChevronDown
-                            className={`h-3.5 w-3.5 shrink-0 text-muted transition-transform ${isOpen ? "rotate-180" : ""}`}
-                          />
-                        </button>
-                      </td>
-                      <td className="p-3 text-right">
-                        <button
-                          onClick={() => removeKeyword(k.id)}
-                          className="text-muted hover:text-red-500 text-xs"
-                        >
-                          Remove
-                        </button>
-                      </td>
-                    </tr>
-                    {isOpen && (
-                      <tr className="animate-fade-in-up border-b border-border last:border-0">
-                        <td colSpan={4} className="bg-background p-3">
-                          <RankHistoryChart ranks={k.ranks} />
-                        </td>
-                      </tr>
-                    )}
-                  </Fragment>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <KeywordTable
+          appId={appId}
+          platform={platform}
+          country={country}
+          keywords={keywords}
+          onChanged={onChanged}
+          onCopyKeywords={copyKeywords}
+        />
       )}
     </div>
   );

@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, lt } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lt } from "drizzle-orm";
 import { db } from "@/db";
 import {
   apps,
@@ -13,7 +13,7 @@ import {
 import * as stores from "@/lib/stores";
 import type { StorePlatform, StoreListing } from "@/lib/stores/types";
 import { computeHealthReport } from "@/lib/health";
-import { extractSeedTerms, scoreKeywordIdea } from "@/lib/research";
+import { extractSeedTerms, scoreKeywordIdea, volumeAndDifficulty } from "@/lib/research";
 import {
   computeReviewAnalysis,
   GENERIC_SENTIMENT_WORDS,
@@ -330,6 +330,23 @@ async function trackKeyword(app: App, keywordId: string): Promise<number | null>
   const keyword = await findKeyword(keywordId);
   const position = await stores.findRank(app.platform, keyword.term, app.storeId, keyword.country);
   await db.insert(keywordRanks).values({ keywordId, position });
+
+  // Enrich keyword metrics (volume, difficulty, appsCount) if missing or null
+  try {
+    if (keyword.volume === null || keyword.difficulty === null || keyword.appsCount === null) {
+      const analysis = await stores.analyzeTerm(app.platform, keyword.term, keyword.country);
+      const { volume, difficulty } = volumeAndDifficulty(
+        analysis.resultCount,
+        analysis.topAuthority,
+      );
+      await db
+        .update(keywords)
+        .set({ volume, difficulty, appsCount: analysis.resultCount })
+        .where(eq(keywords.id, keyword.id));
+    }
+  } catch {
+    // Best-effort: store errors shouldn't fail rank recording
+  }
 
   const appCompetitors = await db.query.competitors.findMany({
     where: eq(competitors.appId, app.id),
@@ -747,4 +764,42 @@ export async function runDailyTracking() {
   }
 
   return summary;
+}
+
+export async function refreshKeywordsMetrics(appId: string, country?: string) {
+  const app = await findApp(appId);
+  const appKeywords = await db.query.keywords.findMany({
+    where: country
+      ? and(eq(keywords.appId, appId), eq(keywords.country, country))
+      : eq(keywords.appId, appId),
+  });
+
+  let updatedCount = 0;
+  for (const kw of appKeywords) {
+    try {
+      const analysis = await stores.analyzeTerm(app.platform, kw.term, kw.country);
+      const { volume, difficulty } = volumeAndDifficulty(
+        analysis.resultCount,
+        analysis.topAuthority,
+      );
+      await db
+        .update(keywords)
+        .set({ volume, difficulty, appsCount: analysis.resultCount })
+        .where(eq(keywords.id, kw.id));
+      updatedCount++;
+    } catch {
+      // Best-effort
+    }
+  }
+  return { updatedCount, total: appKeywords.length };
+}
+
+export async function deleteKeywordsBulk(appId: string, keywordIds: string[]) {
+  if (keywordIds.length === 0) return { deletedCount: 0 };
+  const deleted = await db
+    .delete(keywords)
+    .where(and(eq(keywords.appId, appId), inArray(keywords.id, keywordIds)))
+    .returning({ id: keywords.id });
+  await recomputeHealth(appId);
+  return { deletedCount: deleted.length };
 }
