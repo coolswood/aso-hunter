@@ -1,7 +1,8 @@
 import { useRef, useState } from "react";
-import { Copy, Sparkles, Tags } from "lucide-react";
+import { Copy, ListPlus, Sparkles, Tags } from "lucide-react";
 import KeywordTable, { type KeywordWithRanks } from "./keywords/KeywordTable";
 import KeywordSearchInput from "./keywords/KeywordSearchInput";
+import BulkAddKeywordsModal from "./keywords/BulkAddKeywordsModal";
 import type { StorePlatform } from "@/lib/stores/types";
 
 // Apple's App Store Connect "Keywords" field is a single comma-separated
@@ -60,6 +61,7 @@ export default function KeywordsSection({
 }) {
   const [adding, setAdding] = useState(false);
   const [detecting, setDetecting] = useState(false);
+  const [bulkModalOpen, setBulkModalOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -129,6 +131,17 @@ export default function KeywordsSection({
     }
   }
 
+  async function handleBulkAdd(terms: string[]) {
+    const res = await fetch(`/api/apps/${appId}/keywords/bulk`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ terms, country }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error ?? "Failed to add keywords");
+    onChanged?.();
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
@@ -146,6 +159,14 @@ export default function KeywordsSection({
           className="inline-flex shrink-0 items-center justify-center rounded-lg border border-border p-2 hover:bg-card hover:border-accent disabled:opacity-50 transition-colors"
         >
           <Sparkles className={`h-4 w-4 ${detecting ? "animate-pulse" : ""}`} />
+        </button>
+        <button
+          onClick={() => setBulkModalOpen(true)}
+          title="Bulk add keywords: paste a list of phrases separated by newlines or commas"
+          aria-label="Bulk add keywords"
+          className="inline-flex shrink-0 items-center justify-center rounded-lg border border-border p-2 hover:bg-card hover:border-accent transition-colors"
+        >
+          <ListPlus className="h-4 w-4" />
         </button>
         {keywords.length > 0 && (
           <button
@@ -192,6 +213,14 @@ export default function KeywordsSection({
           onChanged={onChanged}
         />
       )}
+
+      <BulkAddKeywordsModal
+        isOpen={bulkModalOpen}
+        onClose={() => setBulkModalOpen(false)}
+        country={country}
+        existingTerms={keywords.map((k) => k.term)}
+        onAdd={handleBulkAdd}
+      />
     </div>
   );
 }

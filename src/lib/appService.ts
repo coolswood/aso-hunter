@@ -875,6 +875,62 @@ export async function deleteKeywordsBulk(appId: string, keywordIds: string[]) {
   return { deletedCount: deleted.length };
 }
 
+export async function addKeywordsBulk(
+  appId: string,
+  terms: string[],
+  country = DEFAULT_COUNTRY,
+): Promise<{ addedCount: number; ignoredCount: number; keywords: Keyword[] }> {
+  const app = await findApp(appId);
+  const normalizedTerms = Array.from(
+    new Set(terms.map((t) => t.trim().toLowerCase()).filter(Boolean)),
+  );
+
+  if (normalizedTerms.length === 0) {
+    return { addedCount: 0, ignoredCount: 0, keywords: [] };
+  }
+
+  // Find existing keywords for this app and country to ignore duplicates
+  const existing = await db.query.keywords.findMany({
+    where: and(eq(keywords.appId, appId), eq(keywords.country, country)),
+    columns: { term: true },
+  });
+  const existingTerms = new Set(existing.map((k) => k.term.toLowerCase()));
+
+  const newTerms = normalizedTerms.filter((term) => !existingTerms.has(term));
+  const ignoredCount = normalizedTerms.length - newTerms.length;
+
+  if (newTerms.length === 0) {
+    return { addedCount: 0, ignoredCount, keywords: [] };
+  }
+
+  const addedKeywords: Keyword[] = [];
+
+  for (const term of newTerms) {
+    try {
+      const [keyword] = await db.insert(keywords).values({ appId, term, country }).returning();
+
+      addedKeywords.push(keyword);
+    } catch {
+      // In case of unique constraint race, continue
+    }
+  }
+
+  // Track initial ranks and metrics in parallel chunks
+  const CONCURRENCY = 4;
+  for (let i = 0; i < addedKeywords.length; i += CONCURRENCY) {
+    const chunk = addedKeywords.slice(i, i + CONCURRENCY);
+    await Promise.allSettled(chunk.map((kw) => trackKeyword(app, kw.id)));
+  }
+
+  await recomputeHealth(appId);
+
+  return {
+    addedCount: addedKeywords.length,
+    ignoredCount,
+    keywords: addedKeywords,
+  };
+}
+
 export interface KeywordSuggestionItem {
   term: string;
   rank: number | null;

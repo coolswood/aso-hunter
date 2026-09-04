@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { keywordRanks, keywords } from "@/db/schema";
 import {
   addKeyword,
+  addKeywordsBulk,
   autoDetectKeywords,
   deleteKeywordsBulk,
   getKeywordSuggestions,
@@ -85,6 +86,22 @@ keywordsRoutes.post("/refresh-metrics", async (c) => {
   const country = parseCountryParam(c.req.query("country")) ?? undefined;
   const result = await refreshKeywordsMetrics(id, country);
   return c.json(result);
+});
+
+keywordsRoutes.post("/bulk", async (c) => {
+  const id = c.req.param("id")!;
+  const body = await c.req.json().catch(() => ({}));
+  const terms = Array.isArray(body.terms) ? (body.terms as string[]) : [];
+  const country = resolveCountry(typeof body.country === "string" ? body.country : null, "us");
+  if (terms.length === 0) {
+    return c.json({ addedCount: 0, ignoredCount: 0, keywords: [] });
+  }
+  try {
+    const result = await addKeywordsBulk(id, terms, country);
+    return c.json(result, 201);
+  } catch (e) {
+    return c.json({ error: (e as Error).message }, 500);
+  }
 });
 
 keywordsRoutes.delete("/bulk", async (c) => {

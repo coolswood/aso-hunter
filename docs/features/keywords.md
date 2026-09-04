@@ -21,22 +21,25 @@ UI (KeywordTable) ─► REST /api/apps/:id/keywords ─► appService.addKeywor
 
 ## Карта файлов
 
-| Файл                                              | Роль                                                                          |
-| ------------------------------------------------- | ----------------------------------------------------------------------------- |
-| `src/lib/keywordMetrics.ts`                       | Чистые функции расчета Best Rank, Change Delta, Effectiveness Score           |
-| `src/lib/googleDemand.ts`                         | Запросы к Google Web Suggest и Google Trends Topics с кэшированием            |
-| `src/components/keywords/KeywordMetricBadges.tsx` | Визуальные бейджи рангов, прогресс-бар популярности, индикаторы динамики      |
-| `src/components/keywords/KeywordTable.tsx`        | Таблица ключевых слов с сортировкой и встроенными графиками для каждого ключа |
-| `src/components/RankHistoryChart.tsx`             | Индивидуальный график истории позиций ключа (ECharts, диапазоны 7D/14D/30D)   |
-| `src/components/keywords/KeywordSearchInput.tsx`  | Умный ввод с живыми подсказками стора, рангами приложения и метриками         |
-| `src/components/KeywordsSection.tsx`              | Контейнер со строкой поиска/добавления ключей и таблицей                      |
-| `server/routes/apps.keywords.ts`                  | REST-маршруты CRUD, подсказок, массового удаления и обновления метрик         |
+| Файл                                               | Роль                                                                          |
+| -------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `src/lib/keywordMetrics.ts`                        | Чистые функции расчета Best Rank, Change Delta, Effectiveness Score           |
+| `src/lib/googleDemand.ts`                          | Запросы к Google Web Suggest и Google Trends Topics с кэшированием            |
+| `src/lib/bulkKeywords.ts`                          | Чистый парсер списка ключевых фраз (разделение по \n и запятым, дедупликация) |
+| `src/components/keywords/KeywordMetricBadges.tsx`  | Визуальные бейджи рангов, прогресс-бар популярности, индикаторы динамики      |
+| `src/components/keywords/KeywordTable.tsx`         | Таблица ключевых слов с сортировкой и встроенными графиками для каждого ключа |
+| `src/components/RankHistoryChart.tsx`              | Индивидуальный график истории позиций ключа (ECharts, диапазоны 7D/14D/30D)   |
+| `src/components/keywords/KeywordSearchInput.tsx`   | Умный ввод с живыми подсказками стора, рангами приложения и метриками         |
+| `src/components/keywords/BulkAddKeywordsModal.tsx` | Модальное окно для массовой вставки списка ключевых слов                      |
+| `src/components/KeywordsSection.tsx`               | Контейнер со строкой поиска/добавления ключей и таблицей                      |
+| `server/routes/apps.keywords.ts`                   | REST-маршруты CRUD, подсказок, массового удаления и обновления метрик         |
 
 ## API / MCP
 
 - `GET /api/apps/:id/keywords?country=us` — список ключевых слов сторфронта с историей замеров (до 30 точек).
 - `GET /api/apps/:id/keywords/suggestions?term=...&country=us` — живые подсказки стора с позициями и метриками.
 - `POST /api/apps/:id/keywords` — добавить ключевое слово (`{ term, country }`).
+- `POST /api/apps/:id/keywords/bulk` — массовое добавление списка слов (`{ terms: string[], country }`), с пропуском дублей.
 - `POST /api/apps/:id/keywords/auto-detect` — автодетект ключей из заголовка/подзаголовка.
 - `DELETE /api/apps/:id/keywords/:keywordId` — удаление одного ключа.
 - `DELETE /api/apps/:id/keywords/bulk` — массовое удаление ключей (`{ ids: string[] }`).
