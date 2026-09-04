@@ -102,7 +102,15 @@ export default function KeywordsSection({
     }
   }
 
-  async function addKeyword(termToAdd: string) {
+  async function addKeyword(
+    termToAdd: string,
+    metrics?: {
+      volume?: number | null;
+      difficulty?: number | null;
+      appsCount?: number | null;
+      rank?: number | null;
+    },
+  ) {
     if (!termToAdd.trim()) return;
     setAdding(true);
     setError(null);
@@ -110,7 +118,7 @@ export default function KeywordsSection({
       const res = await fetch(`/api/apps/${appId}/keywords`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ term: termToAdd, country }),
+        body: JSON.stringify({ term: termToAdd, country, ...metrics }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to add keyword");

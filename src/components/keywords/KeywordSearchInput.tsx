@@ -11,6 +11,13 @@ export interface SuggestionItem {
   isAlreadyTracked: boolean;
 }
 
+export interface KeywordMetricsPayload {
+  volume?: number | null;
+  difficulty?: number | null;
+  appsCount?: number | null;
+  rank?: number | null;
+}
+
 export default function KeywordSearchInput({
   appId,
   country,
@@ -19,7 +26,7 @@ export default function KeywordSearchInput({
 }: {
   appId: string;
   country: string;
-  onAddKeyword: (term: string) => Promise<void> | void;
+  onAddKeyword: (term: string, metrics?: KeywordMetricsPayload) => Promise<void> | void;
   adding?: boolean;
 }) {
   const [term, setTerm] = useState("");
@@ -83,11 +90,31 @@ export default function KeywordSearchInput({
     };
   }, [term, appId, country]);
 
-  async function handleSelect(selectedTerm: string) {
-    if (!selectedTerm.trim()) return;
-    setTrackingTerm(selectedTerm);
+  async function handleSelect(item: SuggestionItem | string) {
+    const termToTrack = typeof item === "string" ? item.trim() : item.term;
+    if (!termToTrack) return;
+    setTrackingTerm(termToTrack);
     try {
-      await onAddKeyword(selectedTerm);
+      if (typeof item !== "string") {
+        await onAddKeyword(termToTrack, {
+          volume: item.volume,
+          difficulty: item.difficulty,
+          appsCount: item.appsCount,
+          rank: item.rank,
+        });
+      } else {
+        const match = suggestions.find((s) => s.term.toLowerCase() === termToTrack.toLowerCase());
+        if (match) {
+          await onAddKeyword(termToTrack, {
+            volume: match.volume,
+            difficulty: match.difficulty,
+            appsCount: match.appsCount,
+            rank: match.rank,
+          });
+        } else {
+          await onAddKeyword(termToTrack);
+        }
+      }
       setTerm("");
       setIsOpen(false);
       setSuggestions([]);
@@ -116,7 +143,7 @@ export default function KeywordSearchInput({
       case "Enter":
         e.preventDefault();
         if (activeIndex >= 0 && suggestions[activeIndex]) {
-          handleSelect(suggestions[activeIndex].term);
+          handleSelect(suggestions[activeIndex]);
         } else if (term.trim()) {
           handleSelect(term.trim());
         }
@@ -182,7 +209,7 @@ export default function KeywordSearchInput({
                 <div
                   key={item.term}
                   onMouseEnter={() => setActiveIndex(idx)}
-                  onClick={() => handleSelect(item.term)}
+                  onClick={() => handleSelect(item)}
                   className={`group flex items-center justify-between gap-3 rounded-lg px-3 py-2 cursor-pointer transition-colors ${
                     isSelected
                       ? "bg-accent/15 text-foreground"
@@ -228,7 +255,7 @@ export default function KeywordSearchInput({
                       disabled={isTracking}
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleSelect(item.term);
+                        handleSelect(item);
                       }}
                       className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-all ${
                         item.isAlreadyTracked

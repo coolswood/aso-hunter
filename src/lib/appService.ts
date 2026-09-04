@@ -256,18 +256,74 @@ export async function recomputeHealth(appId: string) {
   return saved;
 }
 
-export async function addKeyword(appId: string, term: string, country = DEFAULT_COUNTRY) {
+export async function addKeyword(
+  appId: string,
+  term: string,
+  country = DEFAULT_COUNTRY,
+  initialMetrics?: {
+    volume?: number | null;
+    difficulty?: number | null;
+    appsCount?: number | null;
+    rank?: number | null;
+  },
+) {
+  const app = await findApp(appId);
+  const normalizedTerm = term.trim().toLowerCase();
+
+  let volume = initialMetrics?.volume ?? null;
+  let difficulty = initialMetrics?.difficulty ?? null;
+  let appsCount = initialMetrics?.appsCount ?? null;
+  let position = initialMetrics?.rank;
+
+  // If metrics or rank were not pre-calculated (e.g. user typed a raw query),
+  // fetch them synchronously so the newly tracked keyword is immediately complete
+  if (volume === null || difficulty === null || appsCount === null || position === undefined) {
+    const [foundRank, analysis] = await Promise.all([
+      position !== undefined
+        ? position
+        : stores.findRank(app.platform, normalizedTerm, app.storeId, country).catch(() => null),
+      volume !== null && difficulty !== null && appsCount !== null
+        ? null
+        : stores.analyzeTerm(app.platform, normalizedTerm, country).catch(() => null),
+    ]);
+
+    if (position === undefined) {
+      position = foundRank;
+    }
+    if (analysis) {
+      const vd = volumeAndDifficulty(analysis.resultCount, analysis.topAuthority);
+      volume = vd.volume;
+      difficulty = vd.difficulty;
+      appsCount = analysis.resultCount;
+    }
+  }
+
   const [keyword] = await db
     .insert(keywords)
-    .values({ appId, term: term.trim().toLowerCase(), country })
+    .values({
+      appId,
+      term: normalizedTerm,
+      country,
+      volume,
+      difficulty,
+      appsCount,
+    })
     .returning();
 
-  // Rank lookups hit live store search for the app + every competitor, which
-  // can take a few seconds - don't make the caller wait on that.
+  // Immediately record rank position if known or found
+  if (typeof position === "number" || position === null) {
+    await db.insert(keywordRanks).values({ keywordId: keyword.id, position });
+  }
+
+  // Competitor tracking runs in background since querying every competitor can take several seconds
   after(
     (async () => {
-      const app = await findApp(appId);
-      await trackKeyword(app, keyword.id);
+      const appCompetitors = await db.query.competitors.findMany({
+        where: eq(competitors.appId, app.id),
+      });
+      for (const competitor of appCompetitors) {
+        await trackCompetitorForKeyword(competitor, keyword.id, keyword.term, keyword.country);
+      }
     })(),
   );
 

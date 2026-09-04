@@ -53,9 +53,13 @@ keywordsRoutes.post("/", async (c) => {
   // that isn't a 2-letter code silently falls back to the default ("us") so
   // pre-country clients keep working unchanged.
   const country = resolveCountry(typeof body.country === "string" ? body.country : null, "us");
+  const volume = typeof body.volume === "number" ? body.volume : undefined;
+  const difficulty = typeof body.difficulty === "number" ? body.difficulty : undefined;
+  const appsCount = typeof body.appsCount === "number" ? body.appsCount : undefined;
+  const rank = typeof body.rank === "number" || body.rank === null ? body.rank : undefined;
 
   try {
-    const keyword = await addKeyword(id, term, country);
+    const keyword = await addKeyword(id, term, country, { volume, difficulty, appsCount, rank });
     await recomputeHealth(id);
     return c.json({ keyword }, 201);
   } catch (e) {
