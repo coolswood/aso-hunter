@@ -908,21 +908,26 @@ export async function addKeywordsBulk(
   for (const term of newTerms) {
     try {
       const [keyword] = await db.insert(keywords).values({ appId, term, country }).returning();
-
-      addedKeywords.push(keyword);
+      if (keyword) addedKeywords.push(keyword);
     } catch {
       // In case of unique constraint race, continue
     }
   }
 
-  // Track initial ranks and metrics in parallel chunks
-  const CONCURRENCY = 4;
-  for (let i = 0; i < addedKeywords.length; i += CONCURRENCY) {
-    const chunk = addedKeywords.slice(i, i + CONCURRENCY);
-    await Promise.allSettled(chunk.map((kw) => trackKeyword(app, kw.id)));
-  }
-
   await recomputeHealth(appId);
+
+  // Track initial ranks and metrics asynchronously in background so response returns instantly (<100ms)
+  if (addedKeywords.length > 0) {
+    after(
+      (async () => {
+        const CONCURRENCY = 3;
+        for (let i = 0; i < addedKeywords.length; i += CONCURRENCY) {
+          const chunk = addedKeywords.slice(i, i + CONCURRENCY);
+          await Promise.allSettled(chunk.map((kw) => trackKeyword(app, kw.id)));
+        }
+      })(),
+    );
+  }
 
   return {
     addedCount: addedKeywords.length,

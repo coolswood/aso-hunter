@@ -57,6 +57,7 @@ export default function BulkAddKeywordsModal({
     setError(null);
     try {
       await onAdd(newTerms);
+      setText("");
       onClose();
     } catch (err) {
       setError((err as Error).message || "Failed to add keywords");
